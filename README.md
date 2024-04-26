@@ -11,12 +11,16 @@ The goal of this project is to provide support for three major platforms, namely
 
 However, in a corporate environment, it may be challenging to use the project since root/administrator permissions are not always available for a user account. To overcome this limitation, we are planning to introduce an agentless mode that will operate through Raspberry Pi as an agent. You can find more details about this in the section below.
 #### MacOS
+> TBD
 
 #### Windows
+> TBD
 
 #### Linux
+> TBD
 
 #### Raspberry Pi
+> TBD
 
 ## Project architecture
 
@@ -53,8 +57,8 @@ Devices typically use different internal and public OS APIs. Sometimes, these AP
 
 Another reason for this separation is that calling OS kernel APIs (e.g. to install a keyboard hook or access screen capturing service) usually requires being done from the main thread of the caller process. Combining main thread access to MacOS APIs and MS APIs, in the same way, would be super hard. It is better to allow the use of native GCD or another native event loop mechanism instead of combining different OS APIs.
 
+#### SDK
 > TBD
 
 ### Supported devices
-
 > TBD
