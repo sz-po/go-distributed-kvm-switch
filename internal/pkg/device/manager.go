@@ -3,21 +3,15 @@ package device
 import (
 	"context"
 	"fmt"
-	"io"
+	"os"
 	"sync"
-	"time"
 )
 
-type runtime struct {
-	reader io.Reader
-	writer io.Writer
-}
-
 type descriptor struct {
-	metadata   *Metadata
-	config     Config
-	status     *Status
-	descriptor *descriptor
+	metadata *Metadata
+	config   Config
+	status   *Status
+	process  *os.Process
 }
 
 type Manager struct {
@@ -50,8 +44,13 @@ func (manager *Manager) Create(metadata Metadata, config Config) (Id, error) {
 		metadata: &metadata,
 		config:   config,
 		status: &Status{
-			CreatedAt: time.Now().String(),
-			Process:   "",
+			CreatedAt: now(),
+			Enabled:   false,
+			Process: ProcessStatus{
+				Id:             0,
+				State:          Stopped,
+				StateChangedAt: now(),
+			},
 		},
 	}
 
