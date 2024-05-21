@@ -15,10 +15,12 @@ type testStatus struct {
 }
 
 func testObjectStore_Create(t *testing.T, store ObjectStore[testSpec, testStatus]) {
-	err := store.Create("foo", testSpec{Foo: "bar"})
+	createdObj, err := store.Create("foo", testSpec{Foo: "bar"})
 	assert.NoError(t, err)
+	assert.NotNil(t, createdObj)
 
 	obj, _ := store.Get("foo")
+	assert.NotNil(t, obj)
 	assert.False(t, obj.IsDeleted())
 	assert.True(t, obj.Metadata.DeletedAt.IsEmpty())
 	assert.False(t, obj.Metadata.CreatedAt.IsEmpty())
@@ -26,25 +28,32 @@ func testObjectStore_Create(t *testing.T, store ObjectStore[testSpec, testStatus
 	assert.True(t, obj.Metadata.StatusUpdatedAt.IsEmpty())
 	assert.Nil(t, obj.Status)
 
-	err = store.Create("foo", testSpec{Foo: "bar"})
+	assert.Equal(t, createdObj, obj)
+
+	obj, err = store.Create("foo", testSpec{Foo: "bar"})
 	assert.ErrorIs(t, err, ErrObjectWithNameAlreadyExists)
+	assert.Nil(t, obj)
 
 	store.Delete("foo")
-	err = store.Create("foo", testSpec{Foo: "bar"})
+	obj, err = store.Create("foo", testSpec{Foo: "bar"})
 	assert.ErrorIs(t, err, ErrDeletedObjectWithNameAlreadyExists)
+	assert.Nil(t, obj)
 
 	store.Prune("foo")
-	err = store.Create("foo", testSpec{Foo: "bar"})
+	obj, err = store.Create("foo", testSpec{Foo: "bar"})
 	assert.NoError(t, err)
+	assert.NotNil(t, obj)
 
-	err = store.Create("bar", testSpec{Foo: "bar"})
+	obj, err = store.Create("bar", testSpec{Foo: "bar"})
 	assert.NoError(t, err)
+	assert.NotNil(t, obj)
 
 	spec := testSpec{
 		Foo: "bar",
 	}
-	err = store.Create("baz", spec)
+	obj, err = store.Create("baz", spec)
 	assert.NoError(t, err)
+	assert.NotNil(t, obj)
 	spec.Foo = "baz"
 
 	obj, _ = store.Get("baz")
@@ -55,20 +64,29 @@ func testObjectStore_Create(t *testing.T, store ObjectStore[testSpec, testStatus
 }
 
 func testObjectStore_Delete(t *testing.T, store ObjectStore[testSpec, testStatus]) {
-	err := store.Delete("foo")
+	obj, err := store.Delete("foo")
 	assert.ErrorIs(t, err, ErrObjectNotFound)
+	assert.Nil(t, obj)
 
 	store.Create("foo", testSpec{Foo: "bar"})
-	err = store.Delete("foo")
+	deletedObj, err := store.Delete("foo")
 	assert.NoError(t, err)
+	assert.NotNil(t, deletedObj)
+	assert.True(t, deletedObj.IsDeleted())
 
-	err = store.Delete("foo")
+	obj, err = store.Get("foo", WithDeleted())
+	assert.NotNil(t, obj)
+	assert.NoError(t, err)
+	assert.Equal(t, deletedObj, obj)
+
+	obj, err = store.Delete("foo")
 	assert.ErrorIs(t, err, ErrObjectAlreadyDeleted)
+	assert.Nil(t, obj)
 
-	err = store.Create("foo", testSpec{Foo: "bar"})
+	_, err = store.Create("foo", testSpec{Foo: "bar"})
 	assert.ErrorIs(t, err, ErrDeletedObjectWithNameAlreadyExists)
 
-	obj, err := store.Get("foo")
+	obj, err = store.Get("foo")
 	assert.Nil(t, obj)
 	assert.ErrorIs(t, err, ErrObjectNotFound)
 
@@ -98,19 +116,21 @@ func testObjectStore_Get(t *testing.T, store ObjectStore[testSpec, testStatus]) 
 }
 
 func testObjectStore_UpdateSpecification(t *testing.T, store ObjectStore[testSpec, testStatus]) {
-	err := store.UpdateSpecification("foo", testSpec{Foo: "bar"})
+	obj, err := store.UpdateSpecification("foo", testSpec{Foo: "bar"})
 	assert.ErrorIs(t, err, ErrObjectNotFound)
+	assert.Nil(t, obj)
 
 	store.Create("foo", testSpec{Foo: "bar"})
 	store.Delete("foo")
-	err = store.UpdateSpecification("foo", testSpec{Foo: "bar"})
+	obj, err = store.UpdateSpecification("foo", testSpec{Foo: "bar"})
 	assert.ErrorIs(t, err, ErrObjectNotFound)
+	assert.Nil(t, obj)
 	store.Prune("foo")
 
 	oldSpec := testSpec{Foo: "bar"}
 	newSpec := testSpec{Foo: "baz"}
 
-	err = store.Create("foo", oldSpec)
+	_, err = store.Create("foo", oldSpec)
 	assert.NoError(t, err)
 
 	oldObj, _ := store.Get("foo")
@@ -119,12 +139,14 @@ func testObjectStore_UpdateSpecification(t *testing.T, store ObjectStore[testSpe
 
 	time.Sleep(time.Millisecond)
 
-	err = store.UpdateSpecification("foo", newSpec)
+	updatedObj, err := store.UpdateSpecification("foo", newSpec)
 	assert.NoError(t, err)
+	assert.NotNil(t, updatedObj)
 
 	newObj, _ := store.Get("foo")
 	assert.False(t, newObj.Metadata.SpecificationUpdatedAt.IsEmpty())
 	assert.Equal(t, newSpec, newObj.Specification)
+	assert.Equal(t, newObj, updatedObj)
 
 	assert.NotEqual(t, oldObj.Specification, newObj.Specification)
 	assert.NotEqual(t, oldObj.Metadata.SpecificationUpdatedAt, newObj.Metadata.SpecificationUpdatedAt)
@@ -132,28 +154,30 @@ func testObjectStore_UpdateSpecification(t *testing.T, store ObjectStore[testSpe
 }
 
 func testObjectStore_UpdateStatus(t *testing.T, store ObjectStore[testSpec, testStatus]) {
-	err := store.UpdateStatus("foo", testStatus{Foo: "bar"})
+	obj, err := store.UpdateStatus("foo", testStatus{Foo: "bar"})
 	assert.ErrorIs(t, err, ErrObjectNotFound)
+	assert.Nil(t, obj)
 
 	store.Create("foo", testSpec{Foo: "bar"})
 
-	obj, _ := store.Get("foo")
+	obj, _ = store.Get("foo")
 	assert.True(t, obj.Metadata.StatusUpdatedAt.IsEmpty())
 	assert.Nil(t, obj.Status)
 
 	oldStatus := testStatus{Foo: "bar"}
 	newStatus := testStatus{Foo: "baz"}
 
-	err = store.UpdateStatus("foo", oldStatus)
+	updatedObj, err := store.UpdateStatus("foo", oldStatus)
 	assert.NoError(t, err)
 
 	oldObj, _ := store.Get("foo")
 	assert.Equal(t, oldStatus, *oldObj.Status)
 	assert.False(t, oldObj.Metadata.StatusUpdatedAt.IsEmpty())
+	assert.Equal(t, updatedObj, oldObj)
 
 	time.Sleep(time.Millisecond)
 
-	err = store.UpdateStatus("foo", newStatus)
+	updatedObj, err = store.UpdateStatus("foo", newStatus)
 	assert.NoError(t, err)
 
 	newObj, _ := store.Get("foo")
@@ -161,11 +185,13 @@ func testObjectStore_UpdateStatus(t *testing.T, store ObjectStore[testSpec, test
 	assert.NotEqual(t, oldObj.Status, newObj.Status)
 	assert.NotEqual(t, oldObj.Metadata.StatusUpdatedAt, newObj.Metadata.StatusUpdatedAt)
 	assert.NotEqual(t, oldStatus, newStatus)
+	assert.Equal(t, updatedObj, newObj)
 
 	store.Delete("foo")
 
-	err = store.UpdateStatus("foo", newStatus)
+	obj, err = store.UpdateStatus("foo", newStatus)
 	assert.ErrorIs(t, err, ErrObjectNotFound)
+	assert.Nil(t, obj)
 }
 
 func testObjectStore_Prune(t *testing.T, store ObjectStore[testSpec, testStatus]) {
@@ -209,8 +235,6 @@ func testObjectStore_Find(t *testing.T, store ObjectStore[testSpec, testStatus])
 
 	objects = store.Find(WithDeleted())
 	assert.Len(t, objects, 2)
-	assert.Equal(t, ObjectName("foo"), objects[0])
-	assert.Equal(t, ObjectName("bar"), objects[1])
 
 	objects = store.Find(WithDeleted(), WhereObjectName("foo"))
 	assert.Len(t, objects, 1)

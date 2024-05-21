@@ -17,17 +17,17 @@ func NewMemoryObjectStore[TSpec Specification, TStatus Status]() *MemoryObjectSt
 	}
 }
 
-func (store *MemoryObjectStore[TSpec, TStatus]) Create(name ObjectName, specification TSpec) error {
+func (store *MemoryObjectStore[TSpec, TStatus]) Create(name ObjectName, specification TSpec) (*Object[TSpec, TStatus], error) {
 	store.objectsMutex.Lock()
 	defer store.objectsMutex.Unlock()
 
 	if object, exists := store.objects[name]; exists && !object.IsDeleted() {
-		return ErrObjectWithNameAlreadyExists
+		return nil, ErrObjectWithNameAlreadyExists
 	} else if exists && object.IsDeleted() {
-		return ErrDeletedObjectWithNameAlreadyExists
+		return nil, ErrDeletedObjectWithNameAlreadyExists
 	}
 
-	store.objects[name] = &Object[TSpec, TStatus]{
+	object := &Object[TSpec, TStatus]{
 		Metadata: Metadata{
 			Name:   name,
 			Labels: map[string]string{},
@@ -39,32 +39,46 @@ func (store *MemoryObjectStore[TSpec, TStatus]) Create(name ObjectName, specific
 		Status:        nil,
 	}
 
-	return nil
+	store.objects[name] = object
+
+	return &Object[TSpec, TStatus]{
+		Metadata:      deep.MustCopy(object.Metadata),
+		Specification: deep.MustCopy(object.Specification),
+		Status:        deep.MustCopy(object.Status),
+	}, nil
 }
 
-func (store *MemoryObjectStore[TSpec, TStatus]) UpdateSpecification(name ObjectName, spec TSpec) error {
+func (store *MemoryObjectStore[TSpec, TStatus]) UpdateSpecification(name ObjectName, spec TSpec) (*Object[TSpec, TStatus], error) {
 	store.objectsMutex.Lock()
 	defer store.objectsMutex.Unlock()
 
 	if object, exists := store.objects[name]; !exists {
-		return ErrObjectNotFound
+		return nil, ErrObjectNotFound
 	} else if exists && object.IsDeleted() {
-		return ErrObjectNotFound
+		return nil, ErrObjectNotFound
 	}
 
-	store.objects[name].Specification = deep.MustCopy(spec)
+	specCopy := deep.MustCopy(spec)
 
-	return nil
+	object := store.objects[name]
+	object.Metadata.SpecificationUpdatedAt = Now()
+	object.Specification = specCopy
+
+	return &Object[TSpec, TStatus]{
+		Metadata:      deep.MustCopy(object.Metadata),
+		Specification: deep.MustCopy(object.Specification),
+		Status:        deep.MustCopy(object.Status),
+	}, nil
 }
 
-func (store *MemoryObjectStore[TSpec, TStatus]) UpdateStatus(name ObjectName, status TStatus) error {
+func (store *MemoryObjectStore[TSpec, TStatus]) UpdateStatus(name ObjectName, status TStatus) (*Object[TSpec, TStatus], error) {
 	store.objectsMutex.Lock()
 	defer store.objectsMutex.Unlock()
 
 	if object, exists := store.objects[name]; !exists {
-		return ErrObjectNotFound
+		return nil, ErrObjectNotFound
 	} else if exists && object.IsDeleted() {
-		return ErrObjectNotFound
+		return nil, ErrObjectNotFound
 	}
 
 	statusCopy := deep.MustCopy(status)
@@ -73,7 +87,11 @@ func (store *MemoryObjectStore[TSpec, TStatus]) UpdateStatus(name ObjectName, st
 	object.Metadata.StatusUpdatedAt = Now()
 	object.Status = &statusCopy
 
-	return nil
+	return &Object[TSpec, TStatus]{
+		Metadata:      deep.MustCopy(object.Metadata),
+		Specification: deep.MustCopy(object.Specification),
+		Status:        deep.MustCopy(object.Status),
+	}, nil
 }
 
 func (store *MemoryObjectStore[TSpec, TStatus]) Get(name ObjectName, queryOpts ...ObjectStoreQuery) (*Object[TSpec, TStatus], error) {
@@ -90,7 +108,6 @@ func (store *MemoryObjectStore[TSpec, TStatus]) Get(name ObjectName, queryOpts .
 	}
 
 	object := store.objects[name]
-	object.Metadata.SpecificationUpdatedAt = Now()
 
 	return &Object[TSpec, TStatus]{
 		Metadata:      deep.MustCopy(object.Metadata),
@@ -99,19 +116,24 @@ func (store *MemoryObjectStore[TSpec, TStatus]) Get(name ObjectName, queryOpts .
 	}, nil
 }
 
-func (store *MemoryObjectStore[TSpec, TStatus]) Delete(name ObjectName) error {
+func (store *MemoryObjectStore[TSpec, TStatus]) Delete(name ObjectName) (*Object[TSpec, TStatus], error) {
 	store.objectsMutex.Lock()
 	defer store.objectsMutex.Unlock()
 
 	if object, exists := store.objects[name]; !exists {
-		return ErrObjectNotFound
+		return nil, ErrObjectNotFound
 	} else if object.IsDeleted() {
-		return ErrObjectAlreadyDeleted
+		return nil, ErrObjectAlreadyDeleted
 	}
 
-	store.objects[name].Metadata.DeletedAt = Now()
+	object := store.objects[name]
+	object.Metadata.DeletedAt = Now()
 
-	return nil
+	return &Object[TSpec, TStatus]{
+		Metadata:      deep.MustCopy(object.Metadata),
+		Specification: deep.MustCopy(object.Specification),
+		Status:        deep.MustCopy(object.Status),
+	}, nil
 }
 
 func (store *MemoryObjectStore[TSpec, TStatus]) Prune(name ObjectName) error {

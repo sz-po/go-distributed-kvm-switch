@@ -8,11 +8,11 @@ type objectStoreQuery struct {
 type ObjectStoreQuery func(*objectStoreQuery)
 
 type ObjectStore[TSpec Specification, TStatus Status] interface {
-	Create(ObjectName, TSpec) error
-	UpdateSpecification(ObjectName, TSpec) error
-	UpdateStatus(ObjectName, TStatus) error
+	Create(ObjectName, TSpec) (*Object[TSpec, TStatus], error)
+	UpdateSpecification(ObjectName, TSpec) (*Object[TSpec, TStatus], error)
+	UpdateStatus(ObjectName, TStatus) (*Object[TSpec, TStatus], error)
 	Get(ObjectName, ...ObjectStoreQuery) (*Object[TSpec, TStatus], error)
-	Delete(name ObjectName) error
+	Delete(name ObjectName) (*Object[TSpec, TStatus], error)
 	Prune(name ObjectName) error
 	Find(...ObjectStoreQuery) []ObjectName
 }
