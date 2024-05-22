@@ -7,11 +7,13 @@ import (
 )
 
 type testSpec struct {
-	Foo string
+	Foo        string
+	DefaultFoo string `default:"bar"`
 }
 
 type testStatus struct {
-	Foo string
+	Foo        string
+	DefaultFoo string `default:"bar"`
 }
 
 func testObjectStore_Create(t *testing.T, store ObjectStore[testSpec, testStatus]) {

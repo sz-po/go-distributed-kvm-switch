@@ -4,6 +4,7 @@ import "time"
 
 const TimestampFormat = time.RFC3339Nano
 
+type Duration string
 type Timestamp string
 
 func Now() Timestamp {

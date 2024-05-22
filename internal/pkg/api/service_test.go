@@ -76,6 +76,27 @@ func TestService_Create_AfterCreateHook(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+func TestService_Create_Mutator(t *testing.T) {
+	service := NewService[testSpec, testStatus](NewMemoryObjectStore[testSpec, testStatus](),
+		WithServiceMutator[testSpec, testStatus](WhileCreatingObject, func(object *Object[testSpec, testStatus]) (*Object[testSpec, testStatus], error) {
+			object.Specification.Foo = "baz"
+			return object, nil
+		}))
+
+	obj, err := service.Create("foo", testSpec{Foo: "bar"})
+	assert.NoError(t, err)
+	assert.Equal(t, "baz", obj.Specification.Foo)
+
+	service = NewService[testSpec, testStatus](NewMemoryObjectStore[testSpec, testStatus](),
+		WithServiceMutator[testSpec, testStatus](WhileCreatingObject, func(object *Object[testSpec, testStatus]) (*Object[testSpec, testStatus], error) {
+			return nil, fmt.Errorf("mutator error")
+		}))
+
+	obj, err = service.Create("foo", testSpec{Foo: "bar"})
+	assert.Nil(t, obj)
+	assert.ErrorContains(t, err, "mutator error")
+}
+
 func TestService_Delete(t *testing.T) {
 	service := NewService[testSpec, testStatus](NewMemoryObjectStore[testSpec, testStatus]())
 
@@ -191,6 +212,35 @@ func TestService_UpdateSpecification(t *testing.T) {
 	assert.NotNil(t, obj)
 }
 
+func TestService_UpdateSpecification_Mutator(t *testing.T) {
+	service := NewService[testSpec, testStatus](NewMemoryObjectStore[testSpec, testStatus](),
+		WithServiceMutator[testSpec, testStatus](WhileUpdatingSpecification, func(object *Object[testSpec, testStatus]) (*Object[testSpec, testStatus], error) {
+			object.Specification.Foo = "baz"
+			return object, nil
+		}))
+
+	obj, err := service.Create("foo", testSpec{Foo: "bar"})
+	assert.NoError(t, err)
+	assert.Equal(t, "bar", obj.Specification.Foo)
+
+	obj, err = service.UpdateSpecification("foo", testSpec{Foo: "bar"})
+	assert.NoError(t, err)
+	assert.Equal(t, "baz", obj.Specification.Foo)
+
+	service = NewService[testSpec, testStatus](NewMemoryObjectStore[testSpec, testStatus](),
+		WithServiceMutator[testSpec, testStatus](WhileUpdatingSpecification, func(object *Object[testSpec, testStatus]) (*Object[testSpec, testStatus], error) {
+			return nil, fmt.Errorf("mutator error")
+		}))
+
+	obj, err = service.Create("foo", testSpec{Foo: "bar"})
+	assert.NotNil(t, obj)
+	assert.NoError(t, err)
+
+	obj, err = service.UpdateSpecification("foo", testSpec{Foo: "bar"})
+	assert.Nil(t, obj)
+	assert.ErrorContains(t, err, "mutator error")
+}
+
 func TestService_UpdateSpecification_BeforeSpecificationUpdateHook(t *testing.T) {
 	hookCalled := false
 	service := NewService[testSpec, testStatus](NewMemoryObjectStore[testSpec, testStatus](),
@@ -301,6 +351,35 @@ func TestService_UpdateStatus(t *testing.T) {
 	obj, err = service.UpdateStatus("foo", testStatus{Foo: "bar"})
 	assert.NoError(t, err)
 	assert.NotNil(t, obj)
+}
+
+func TestService_UpdateStatus_Mutator(t *testing.T) {
+	service := NewService[testSpec, testStatus](NewMemoryObjectStore[testSpec, testStatus](),
+		WithServiceMutator[testSpec, testStatus](WhileUpdatingStatus, func(object *Object[testSpec, testStatus]) (*Object[testSpec, testStatus], error) {
+			object.Status.Foo = "baz"
+			return object, nil
+		}))
+
+	obj, err := service.Create("foo", testSpec{Foo: "bar"})
+	assert.NoError(t, err)
+	assert.Equal(t, "bar", obj.Specification.Foo)
+
+	obj, err = service.UpdateStatus("foo", testStatus{Foo: "bar"})
+	assert.NoError(t, err)
+	assert.Equal(t, "baz", obj.Status.Foo)
+
+	service = NewService[testSpec, testStatus](NewMemoryObjectStore[testSpec, testStatus](),
+		WithServiceMutator[testSpec, testStatus](WhileUpdatingStatus, func(object *Object[testSpec, testStatus]) (*Object[testSpec, testStatus], error) {
+			return nil, fmt.Errorf("mutator error")
+		}))
+
+	obj, err = service.Create("foo", testSpec{Foo: "bar"})
+	assert.NotNil(t, obj)
+	assert.NoError(t, err)
+
+	obj, err = service.UpdateStatus("foo", testStatus{Foo: "bar"})
+	assert.Nil(t, obj)
+	assert.ErrorContains(t, err, "mutator error")
 }
 
 func TestService_UpdateStatus_BeforeStatusUpdateHook(t *testing.T) {

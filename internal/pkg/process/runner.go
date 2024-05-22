@@ -35,6 +35,7 @@ type Runner struct {
 	wg      *sync.WaitGroup
 }
 
+// NewRunner creates a new Runner.
 func NewRunner(executablePath string, opts ...RunnerOpts) *Runner {
 	runner := &Runner{
 		executablePath: executablePath,
@@ -55,22 +56,23 @@ func NewRunner(executablePath string, opts ...RunnerOpts) *Runner {
 	}
 
 	runner.logger = runner.logger.With(
-		slog.String("module", "process.runner"),
+		slog.String("module", "process-runner"),
 		slog.String("executablePath", executablePath),
 	)
+
+	return runner
+}
+
+// Start the process. If the process is already running, it returns an error.
+func (runner *Runner) Start() error {
+	if runner.isRunning {
+		return ErrProcessIsRunning
+	}
 
 	runner.process = exec.Command(runner.executablePath, runner.executableArgs...)
 	runner.process.Stdin = runner.stdin
 	runner.process.Stdout = runner.stdout
 	runner.process.Stderr = runner.stderr
-
-	return runner
-}
-
-func (runner *Runner) Start() error {
-	if runner.isRunning {
-		return ErrProcessIsRunning
-	}
 
 	runner.exitCode = 0
 	runner.pid = 0
@@ -122,6 +124,9 @@ func (runner *Runner) Wait() error {
 	return nil
 }
 
+// Stop the process. If the process is not running, it returns an error. If the process is running, it sends
+// SIGINT to the process. After that, it waits for the process to finish. If the process is still running after
+// the timeout, it sends SIGKILL to the process.
 func (runner *Runner) Stop(ctx context.Context) error {
 	if !runner.isRunning {
 		return ErrProcessIsNotRunning
@@ -202,18 +207,21 @@ func WithArgs(args ...string) RunnerOpts {
 	}
 }
 
+// WithStdin sets the stdin of the process.
 func WithStdin(stdin io.Reader) RunnerOpts {
 	return func(runner *Runner) {
 		runner.stdin = stdin
 	}
 }
 
+// WithStdout sets the stdout of the process.
 func WithStdout(stdout io.Writer) RunnerOpts {
 	return func(runner *Runner) {
 		runner.stdout = stdout
 	}
 }
 
+// WithStderr sets the stderr of the process.
 func WithStderr(stderr io.Writer) RunnerOpts {
 	return func(runner *Runner) {
 		runner.stderr = stderr
