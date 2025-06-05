@@ -8,6 +8,24 @@ import (
 	"time"
 )
 
+func TestProcess_Specification_AutoEnable(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	process, err := NewProcess(Specification{
+		ExecutablePath: "/bin/sleep",
+		Arguments: []string{
+			"5",
+		},
+		AutoEnable: true,
+	})
+	assert.NoError(t, err)
+
+	timeoutCtx, timeoutCancel := context.WithTimeout(ctx, 1*time.Second)
+	defer timeoutCancel()
+	assert.NoError(t, process.Wait(timeoutCtx, Running))
+}
+
 func TestProcess_Enable(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -33,4 +51,29 @@ func TestProcess_Enable(t *testing.T) {
 	timeoutCtx, timeoutCancel = context.WithTimeout(ctx, 1*time.Second)
 	defer timeoutCancel()
 	assert.NoError(t, process.Wait(timeoutCtx, Running))
+}
+
+func TestProcess_Disable(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	process, err := NewProcess(Specification{
+		ExecutablePath: "/bin/sleep",
+		Arguments: []string{
+			"5",
+		},
+		AutoEnable: true,
+	})
+	assert.NoError(t, err)
+
+	timeoutCtx, timeoutCancel := context.WithTimeout(ctx, 1*time.Second)
+	defer timeoutCancel()
+	assert.NoError(t, process.Wait(timeoutCtx, Running))
+
+	assert.NoError(t, process.Disable(ctx))
+	assert.ErrorIs(t, process.Disable(ctx), ErrProcessAlreadyDisabled)
+
+	timeoutCtx, timeoutCancel = context.WithTimeout(ctx, 1*time.Second)
+	defer timeoutCancel()
+	assert.NoError(t, process.Wait(timeoutCtx, Idle))
 }
