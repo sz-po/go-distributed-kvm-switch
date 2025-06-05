@@ -1,40 +1,89 @@
 package process
 
 import (
-	"github.com/sz-po/go-distributed-kvm-switch/internal/pkg/api"
+	"context"
+	"fmt"
+	"github.com/go-playground/validator/v10"
 	"log/slog"
-	"os"
-	"time"
+	"sync"
 )
 
-type Service struct {
-	*api.Service[Specification, Status]
-
-	logger *slog.Logger
+type ServiceConfig struct {
 }
 
-func NewService() *Service {
-	store := api.NewMemoryObjectStore[Specification, Status]()
+type Service struct {
+	ctx       context.Context
+	wg        *sync.WaitGroup
+	config    ServiceConfig
+	validator *validator.Validate
+	logger    *slog.Logger
 
-	service := &Service{
-		logger: slog.New(slog.NewJSONHandler(os.Stdout, nil)).With(slog.String("module", "process.service")),
+	processStore      map[Name]*Process
+	processStoreMutex sync.Mutex
+}
+
+func NewService(ctx context.Context, wg *sync.WaitGroup, config ServiceConfig) (*Service, error) {
+	return &Service{
+		ctx:       ctx,
+		wg:        wg,
+		config:    config,
+		validator: validator.New(validator.WithRequiredStructEnabled()),
+		logger:    slog.Default().With(slog.String("componentName", "process.Service")),
+
+		processStore:      map[Name]*Process{},
+		processStoreMutex: sync.Mutex{},
+	}, nil
+}
+
+func (s *Service) Create(ctx context.Context, name Name, specification Specification) (*Process, error) {
+	s.processStoreMutex.Lock()
+	defer s.processStoreMutex.Unlock()
+
+	if err := s.validator.Struct(specification); err != nil {
+		return nil, fmt.Errorf("failed to validate specification: %w", err)
 	}
 
-	service.Service = api.NewService[Specification, Status](store,
-		api.WithDefaults[Specification, Status](),
-		api.WithImmutableSpecification[Specification, Status](),
-		api.WithServiceHook[Specification, Status](api.BeforeCreate, service.beforeObjectCreated),
-		api.WithController[Specification, Status, Runner](NewController(), time.NewTicker(200*time.Millisecond).C),
+	if _, exists := s.processStore[name]; exists {
+		return nil, ErrProcessNameAlreadyTaken
+	}
+
+	processLogger := slog.Default().With(
+		slog.String("processName", string(name)),
 	)
 
-	return service
-}
-
-func (service *Service) beforeObjectCreated(oldObject *api.Object[Specification, Status], newObject *api.Object[Specification, Status]) error {
-	_, err := os.Stat(newObject.Specification.Execution.ExecutablePath)
+	process, err := NewProcess(specification, WithLogger(processLogger))
 	if err != nil {
-		return err
+		return nil, fmt.Errorf("failed to create instance: %w", err)
 	}
 
-	return nil
+	s.processStore[name] = process
+	return process, nil
+}
+
+func (s *Service) Delete(ctx context.Context, name Name) error {
+	panic("not implemented")
+}
+
+func (s *Service) Get(name Name) (*Process, error) {
+	s.processStoreMutex.Lock()
+	defer s.processStoreMutex.Unlock()
+
+	if _, exists := s.processStore[name]; !exists {
+		return nil, ErrProcessNotFound
+	}
+
+	return s.processStore[name], nil
+}
+
+func (s *Service) Find() map[Name]*Process {
+	s.processStoreMutex.Lock()
+	defer s.processStoreMutex.Unlock()
+
+	processes := map[Name]*Process{}
+
+	for processName, process := range s.processStore {
+		processes[processName] = process
+	}
+
+	return processes
 }

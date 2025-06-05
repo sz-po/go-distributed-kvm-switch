@@ -1,0 +1,22 @@
+### Find processes
+# @name FindProcesses
+GET http://127.0.0.1:8080/api/process
+
+### Create process
+# @name CreateProcess
+POST http://127.0.0.1:8080/api/process/test
+Content-Type: application/json
+
+{"specification":  {"executablePath": "/bin/sleep", "arguments":  ["30"]}}
+
+### Enable process
+# @name EnableProcess
+POST http://127.0.0.1:8080/api/process/test/enable
+
+### Enable disable
+# @name DisableProcess
+POST http://127.0.0.1:8080/api/process/test/disable
+
+### Get process
+# @name GetProcess
+GET http://127.0.0.1:8080/api/process/test
