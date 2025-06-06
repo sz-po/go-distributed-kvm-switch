@@ -161,6 +161,10 @@ func (p *Process) startInstance() error {
 		return ErrProcessAlreadyRunning
 	}
 
+	if p.status.ProcessId != nil {
+		p.status.RestartCount++
+	}
+
 	// reset status fields from any previous run
 	p.status.ProcessId = nil
 	p.status.ExitCode = nil
@@ -269,6 +273,7 @@ func (p *Process) watchInstance() {
 			logger = logger.With(slog.Int("exitCode", exitErr.ExitCode()))
 		}
 		p.status.ErrorMessage = pointy.String(err.Error())
+		p.status.FailureCount++
 		logger.Warn("Process finished with an error.", slog.String("error", err.Error()))
 	} else {
 		p.status.ExitCode = pointy.Int(0)
@@ -286,10 +291,10 @@ func (p *Process) buildWorkingDirectory() (string, error) {
 	if p.specification.WorkingDirectoryPath != nil {
 		stat, err := os.Stat(*p.specification.WorkingDirectoryPath)
 		if err != nil {
-			return "", fmt.Errorf("failed to stat working directory: %w", err)
+			return "", fmt.Errorf("%w: %w", ErrInvalidWorkingDirectory, err)
 		}
 		if !stat.IsDir() {
-			return "", fmt.Errorf("working directory is not a directory: %s", *p.specification.WorkingDirectoryPath)
+			return "", fmt.Errorf("%w: %s", ErrWorkingDirectoryIsNotDirectory, *p.specification.WorkingDirectoryPath)
 		}
 		return *p.specification.WorkingDirectoryPath, nil
 	}

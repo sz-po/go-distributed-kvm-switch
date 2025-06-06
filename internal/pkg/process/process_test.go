@@ -4,6 +4,9 @@ package process
 import (
 	"context"
 	"github.com/stretchr/testify/assert"
+	"github.com/sz-po/go-distributed-kvm-switch/internal/pkg/api/utils"
+	"go.openly.dev/pointy"
+	"os"
 	"testing"
 	"time"
 )
@@ -76,4 +79,105 @@ func TestProcess_Disable(t *testing.T) {
 	timeoutCtx, timeoutCancel = context.WithTimeout(ctx, 1*time.Second)
 	defer timeoutCancel()
 	assert.NoError(t, process.Wait(timeoutCtx, Idle))
+}
+
+func TestProcess_buildWorkingDirectory_ProvidedInSpecification(t *testing.T) {
+	process, err := NewProcess(Specification{
+		ExecutablePath:       "/bin/sleep",
+		WorkingDirectoryPath: pointy.String("/tmp"),
+	})
+	assert.NoError(t, err)
+
+	workingDirectory, err := process.buildWorkingDirectory()
+	assert.NoError(t, err)
+	assert.Equal(t, "/tmp", workingDirectory)
+}
+
+func TestProcess_buildWorkingDirectory_ProvidedInSpecification_File(t *testing.T) {
+	process, err := NewProcess(Specification{
+		ExecutablePath:       "/bin/sleep",
+		WorkingDirectoryPath: pointy.String("/bin/sleep"),
+	})
+	assert.NoError(t, err)
+
+	workingDirectory, err := process.buildWorkingDirectory()
+	assert.ErrorIs(t, err, ErrWorkingDirectoryIsNotDirectory)
+	assert.Equal(t, "", workingDirectory)
+}
+
+func TestProcess_buildWorkingDirectory_ProvidedInSpecification_NotExists(t *testing.T) {
+	process, err := NewProcess(Specification{
+		ExecutablePath:       "/bin/sleep",
+		WorkingDirectoryPath: pointy.String("/tmp/non-existent-directory"),
+	})
+	assert.NoError(t, err)
+
+	workingDirectory, err := process.buildWorkingDirectory()
+	assert.ErrorIs(t, err, ErrInvalidWorkingDirectory)
+	assert.Equal(t, "", workingDirectory)
+}
+
+func TestProcess_buildWorkingDirectory_NotProvidedInSpecification(t *testing.T) {
+	process, err := NewProcess(Specification{
+		ExecutablePath:       "/bin/sleep",
+		WorkingDirectoryPath: nil,
+	})
+	assert.NoError(t, err)
+
+	currentWorkingDirectory, err := os.Getwd()
+	assert.NoError(t, err)
+	workingDirectory, err := process.buildWorkingDirectory()
+	assert.NoError(t, err)
+	assert.Equal(t, currentWorkingDirectory, workingDirectory)
+}
+
+func TestProcess_GetSpecification(t *testing.T) {
+	specification := Specification{
+		ExecutablePath:       "/bin/sleep",
+		WorkingDirectoryPath: nil,
+		EnvironmentVariables: map[string]string{
+			"FOO": "BAR",
+		},
+		Arguments:    []string{"foo", "bar"},
+		RestartMode:  Always,
+		AutoEnable:   true,
+		PollInterval: utils.Duration(time.Second),
+		KillTimeout:  utils.Duration(time.Second),
+	}
+
+	process, err := NewProcess(specification)
+	assert.NoError(t, err)
+	assert.Equal(t, specification, process.GetSpecification())
+}
+
+func TestProcess_Restart(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	process, err := NewProcess(Specification{
+		ExecutablePath: "/bin/sleep",
+		Arguments: []string{
+			"5",
+		},
+		AutoEnable: false,
+	}, WithContext(ctx))
+	assert.NoError(t, err)
+
+	assert.Equal(t, 0, process.GetStatus().RestartCount)
+	err = process.Enable(ctx)
+	assert.NoError(t, err)
+
+	timeoutCtx, timeoutCancel := context.WithTimeout(ctx, 1*time.Second)
+	defer timeoutCancel()
+	assert.NoError(t, process.Wait(timeoutCtx, Running))
+	assert.Equal(t, 0, process.GetStatus().RestartCount)
+
+	timeoutCtx, timeoutCancel = context.WithTimeout(ctx, 1*time.Second)
+	defer timeoutCancel()
+	assert.NoError(t, process.Restart(timeoutCtx))
+
+	timeoutCtx, timeoutCancel = context.WithTimeout(ctx, 1*time.Second)
+	defer timeoutCancel()
+	assert.NoError(t, process.Wait(timeoutCtx, Running))
+	assert.Equal(t, 1, process.GetStatus().RestartCount)
 }
