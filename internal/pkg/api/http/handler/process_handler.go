@@ -10,12 +10,12 @@ import (
 )
 
 type ProcessHandler struct {
-	service *process.Service
+	service process.Service
 	router  *chi.Mux
 	logger  *slog.Logger
 }
 
-func NewProcessHandler(service *process.Service) *ProcessHandler {
+func NewProcessHandler(service process.Service) *ProcessHandler {
 	router := chi.NewRouter()
 
 	handler := &ProcessHandler{
@@ -28,7 +28,7 @@ func NewProcessHandler(service *process.Service) *ProcessHandler {
 
 	router.Post("/{name}", handler.Create)
 	router.Delete("/{name}", handler.Delete)
-	router.Get("/{name}", handler.Get)
+	router.Get("/{name}", handler.GetByName)
 	router.Get("/", handler.Find)
 	router.Post("/{name}/restart", handler.Restart)
 	router.Post("/{name}/enable", handler.Enable)
@@ -42,7 +42,7 @@ func (handler *ProcessHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 }
 
 func (handler *ProcessHandler) Create(w http.ResponseWriter, r *http.Request) {
-	logger := handler.logger.With(slog.String("handlerName", "Create"))
+	logger := handler.logger.With(slog.String("handlerName", "CreateProcess"))
 
 	var request CreateRequest
 
@@ -54,7 +54,7 @@ func (handler *ProcessHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	processName := process.Name(chi.URLParam(r, "name"))
 
-	process, err := handler.service.Create(r.Context(), processName, request.Specification)
+	process, err := handler.service.CreateProcess(r.Context(), processName, request.Specification)
 	if err != nil {
 		logger.Error("Failed to create process", slog.String("error", err.Error()))
 		w.WriteHeader(http.StatusInternalServerError)
@@ -67,21 +67,39 @@ func (handler *ProcessHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusCreated)
-	if err := json.NewEncoder(w).Encode(response); err != nil {
+
+	responseBody, err := json.Marshal(response)
+	if err != nil {
 		logger.Error("Failed to encode response", slog.String("error", err.Error()))
 	}
+
+	w.Write(responseBody)
 }
 
 func (handler *ProcessHandler) Delete(w http.ResponseWriter, r *http.Request) {
-	panic("not implemented")
-}
-
-func (handler *ProcessHandler) Get(w http.ResponseWriter, r *http.Request) {
-	logger := handler.logger.With(slog.String("handlerName", "GetStatus"))
+	logger := handler.logger.With(slog.String("handlerName", "Delete"))
 
 	processName := process.Name(chi.URLParam(r, "name"))
 
-	processInstance, err := handler.service.Get(processName)
+	if err := handler.service.DeleteProcess(r.Context(), processName); err != nil {
+		logger.Error("Failed to delete process", slog.String("error", err.Error()))
+		if errors.Is(err, process.ErrProcessNotFound) {
+			w.WriteHeader(http.StatusNotFound)
+		} else {
+			w.WriteHeader(http.StatusInternalServerError)
+		}
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+}
+
+func (handler *ProcessHandler) GetByName(w http.ResponseWriter, r *http.Request) {
+	logger := handler.logger.With(slog.String("handlerName", "GetByName"))
+
+	processName := process.Name(chi.URLParam(r, "name"))
+
+	processInstance, err := handler.service.GetProcessByName(processName)
 	if err != nil {
 		logger.Error("Failed to get process", slog.String("error", err.Error()))
 		if errors.Is(err, process.ErrProcessNotFound) {
@@ -92,22 +110,26 @@ func (handler *ProcessHandler) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	response := GetResponse{
+	response := GetByNameResponse{
 		Name:          processName,
 		Specification: processInstance.GetSpecification(),
 		Status:        processInstance.GetStatus(),
 	}
 
 	w.WriteHeader(http.StatusOK)
-	if err := json.NewEncoder(w).Encode(response); err != nil {
+
+	responseBody, err := json.Marshal(response)
+	if err != nil {
 		logger.Error("Failed to encode response", slog.String("error", err.Error()))
 	}
+
+	w.Write(responseBody)
 }
 
 func (handler *ProcessHandler) Find(w http.ResponseWriter, r *http.Request) {
-	logger := handler.logger.With(slog.String("handlerName", "Find"))
+	logger := handler.logger.With(slog.String("handlerName", "FindProcess"))
 
-	processes := handler.service.Find()
+	processes := handler.service.FindProcess()
 
 	response := FindResponse{
 		Processes: []FindResponseProcess{},
@@ -123,12 +145,38 @@ func (handler *ProcessHandler) Find(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusOK)
-	if err := json.NewEncoder(w).Encode(response); err != nil {
+
+	responseBody, err := json.Marshal(response)
+	if err != nil {
 		logger.Error("Failed to encode response", slog.String("error", err.Error()))
 	}
+
+	w.Write(responseBody)
 }
 func (handler *ProcessHandler) Restart(w http.ResponseWriter, r *http.Request) {
-	panic("not implemented")
+	logger := handler.logger.With(slog.String("handlerName", "Restart"))
+
+	processName := process.Name(chi.URLParam(r, "name"))
+
+	processInstance, err := handler.service.GetProcessByName(processName)
+	if err != nil {
+		logger.Error("Failed to get process", slog.String("error", err.Error()))
+		if errors.Is(err, process.ErrProcessNotFound) {
+			w.WriteHeader(http.StatusNotFound)
+		} else {
+			w.WriteHeader(http.StatusInternalServerError)
+		}
+		return
+	}
+
+	err = processInstance.Restart(r.Context())
+	if err != nil {
+		logger.Error("Failed to restart process", slog.String("error", err.Error()))
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
 }
 
 func (handler *ProcessHandler) Enable(w http.ResponseWriter, r *http.Request) {
@@ -136,7 +184,7 @@ func (handler *ProcessHandler) Enable(w http.ResponseWriter, r *http.Request) {
 
 	processName := process.Name(chi.URLParam(r, "name"))
 
-	processInstance, err := handler.service.Get(processName)
+	processInstance, err := handler.service.GetProcessByName(processName)
 	if err != nil {
 		logger.Error("Failed to get process", slog.String("error", err.Error()))
 		if errors.Is(err, process.ErrProcessNotFound) {
@@ -164,7 +212,7 @@ func (handler *ProcessHandler) Disable(w http.ResponseWriter, r *http.Request) {
 
 	processName := process.Name(chi.URLParam(r, "name"))
 
-	processInstance, err := handler.service.Get(processName)
+	processInstance, err := handler.service.GetProcessByName(processName)
 	if err != nil {
 		logger.Error("Failed to get process", slog.String("error", err.Error()))
 		if errors.Is(err, process.ErrProcessNotFound) {

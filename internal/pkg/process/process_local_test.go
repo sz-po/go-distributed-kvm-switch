@@ -1,8 +1,9 @@
-// process_test.go
+// process_local_test.go
 package process
 
 import (
 	"context"
+	"github.com/go-playground/validator/v10"
 	"github.com/stretchr/testify/assert"
 	"github.com/sz-po/go-distributed-kvm-switch/internal/pkg/api/utils"
 	"go.openly.dev/pointy"
@@ -98,11 +99,9 @@ func TestProcess_buildWorkingDirectory_ProvidedInSpecification_File(t *testing.T
 		ExecutablePath:       "/bin/sleep",
 		WorkingDirectoryPath: pointy.String("/bin/sleep"),
 	})
-	assert.NoError(t, err)
+	assert.ErrorAs(t, err, &validator.ValidationErrors{})
+	assert.Nil(t, process)
 
-	workingDirectory, err := process.buildWorkingDirectory()
-	assert.ErrorIs(t, err, ErrWorkingDirectoryIsNotDirectory)
-	assert.Equal(t, "", workingDirectory)
 }
 
 func TestProcess_buildWorkingDirectory_ProvidedInSpecification_NotExists(t *testing.T) {
@@ -110,11 +109,8 @@ func TestProcess_buildWorkingDirectory_ProvidedInSpecification_NotExists(t *test
 		ExecutablePath:       "/bin/sleep",
 		WorkingDirectoryPath: pointy.String("/tmp/non-existent-directory"),
 	})
-	assert.NoError(t, err)
-
-	workingDirectory, err := process.buildWorkingDirectory()
-	assert.ErrorIs(t, err, ErrInvalidWorkingDirectory)
-	assert.Equal(t, "", workingDirectory)
+	assert.ErrorAs(t, err, &validator.ValidationErrors{})
+	assert.Nil(t, process)
 }
 
 func TestProcess_buildWorkingDirectory_NotProvidedInSpecification(t *testing.T) {

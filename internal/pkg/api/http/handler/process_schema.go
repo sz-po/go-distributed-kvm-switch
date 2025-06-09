@@ -26,7 +26,7 @@ type StartResponse struct {
 	Status process.Status `json:"status"`
 }
 
-type GetResponse struct {
+type GetByNameResponse struct {
 	Name          process.Name          `json:"name"`
 	Specification process.Specification `json:"specification"`
 	Status        process.Status        `json:"status"`

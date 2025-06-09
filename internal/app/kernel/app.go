@@ -10,9 +10,13 @@ import (
 )
 
 func Start(ctx context.Context, wg *sync.WaitGroup, config Config) error {
-	processService, err := process.NewService(ctx, wg, config.Service.Process)
+	processService, err := process.NewLocalService(config.Service.Process)
 	if err != nil {
 		return fmt.Errorf("failed to create process service: %w", err)
+	}
+
+	if err = processService.Start(ctx, wg); err != nil {
+		return fmt.Errorf("failed to start process service: %w", err)
 	}
 
 	_, err = device.New(ctx, wg, config.Service.Device, processService)

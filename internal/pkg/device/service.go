@@ -14,10 +14,10 @@ type Service struct {
 	wg     *sync.WaitGroup
 	config ServiceConfig
 
-	processService *process.Service
+	processService *process.LocalService
 }
 
-func New(ctx context.Context, wg *sync.WaitGroup, config ServiceConfig, processService *process.Service) (*Service, error) {
+func New(ctx context.Context, wg *sync.WaitGroup, config ServiceConfig, processService *process.LocalService) (*Service, error) {
 	return &Service{
 		ctx:            ctx,
 		wg:             wg,

@@ -7,8 +7,8 @@ import (
 )
 
 type ServiceConfig struct {
-	Process process.ServiceConfig `kong:"embed,prefix=process-"`
-	Device  device.ServiceConfig  `kong:"embed,prefix=device-"`
+	Process process.LocalServiceConfig `kong:"embed,prefix=process-"`
+	Device  device.ServiceConfig       `kong:"embed,prefix=device-"`
 }
 
 type ApiConfig struct {

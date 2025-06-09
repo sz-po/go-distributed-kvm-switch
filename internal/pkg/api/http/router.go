@@ -7,7 +7,7 @@ import (
 	"net/http"
 )
 
-func NewRouter(processService *process.Service) http.Handler {
+func NewRouter(processService process.Service) http.Handler {
 	router := chi.NewRouter()
 
 	router.Mount("/process", handler.NewProcessHandler(processService))
