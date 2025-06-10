@@ -1,0 +1,13 @@
+kind: dummy-keyboard-source
+config:
+  randomKeystrokes:
+    enabled: true
+    interval:
+      from: 100ms
+      to: 5s
+    characters:
+      smallLetters: true
+      bigLetters: true
+      numbers: true
+      symbols: true
+      whiteSpace: true

@@ -184,7 +184,7 @@ func (p *LocalProcess) startInstance() error {
 		p.status.ErrorMessage = pointy.String(err.Error())
 		return fmt.Errorf("failed to build working directory: %w", err)
 	}
-	p.status.WorkingDirectoryPath = cmd.Dir
+	p.status.WorkingDirectoryPath = pointy.String(cmd.Dir)
 
 	// environment
 	if cmd.Env, p.status.EnvironmentVariables, err = p.buildEnvironmentVariables(); err != nil {
@@ -284,6 +284,7 @@ func (p *LocalProcess) watchInstance() {
 	}
 
 	p.status.Phase = Idle
+	p.status.WorkingDirectoryPath = nil
 
 	p.instanceMutex.Lock()
 	p.instance = nil

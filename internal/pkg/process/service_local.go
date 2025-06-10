@@ -41,7 +41,7 @@ func NewLocalService(config LocalServiceConfig) (*LocalService, error) {
 	return service, nil
 }
 
-func (service *LocalService) Start(ctx context.Context, wg *sync.WaitGroup) error {
+func (service *LocalService) StartService(ctx context.Context, wg *sync.WaitGroup) error {
 	service.wg = wg
 
 	wg.Add(1)

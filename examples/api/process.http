@@ -13,9 +13,13 @@ Content-Type: application/json
 # @name EnableProcess
 POST http://127.0.0.1:8080/api/process/test/enable
 
-### Enable disable
+### Disable process
 # @name DisableProcess
 POST http://127.0.0.1:8080/api/process/test/disable
+
+### Restart process
+# @name RestartProcess
+POST http://127.0.0.1:8080/api/process/test/restart
 
 ### Get process
 # @name GetProcess

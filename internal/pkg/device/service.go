@@ -2,26 +2,15 @@ package device
 
 import (
 	"context"
-	"github.com/sz-po/go-distributed-kvm-switch/internal/pkg/process"
-	"sync"
+	"fmt"
 )
 
-type ServiceConfig struct {
+type Service interface {
+	CreateDevice(ctx context.Context, name Name, specification Specification) (Device, error)
+	DeleteDevice(ctx context.Context, name Name) error
+	GetDeviceByName(name Name) (Device, error)
+	HasDevice(name Name) bool
 }
 
-type Service struct {
-	ctx    context.Context
-	wg     *sync.WaitGroup
-	config ServiceConfig
-
-	processService *process.LocalService
-}
-
-func New(ctx context.Context, wg *sync.WaitGroup, config ServiceConfig, processService *process.LocalService) (*Service, error) {
-	return &Service{
-		ctx:            ctx,
-		wg:             wg,
-		config:         config,
-		processService: processService,
-	}, nil
-}
+var ErrDeviceNameAlreadyTaken = fmt.Errorf("device name already taken")
+var ErrDeviceNotFound = fmt.Errorf("device not found")

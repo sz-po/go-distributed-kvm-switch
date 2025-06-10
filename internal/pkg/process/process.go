@@ -110,7 +110,7 @@ type Status struct {
 
 	// WorkingDirectoryPath is the file system path to the process instance's working directory. It may be different from
 	// the original specification, if WorkingDirectoryPath is not nil (inherit the caller's working directory).
-	WorkingDirectoryPath string `json:"workingDirectoryPath"`
+	WorkingDirectoryPath *string `json:"workingDirectoryPath,omitempty"`
 }
 
 type Process interface {

@@ -23,7 +23,7 @@ func TestLocalService_Start(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	err = service.Start(ctx, wg)
+	err = service.StartService(ctx, wg)
 	assert.NoError(t, err)
 }
 
@@ -46,7 +46,7 @@ func TestLocalService_CreateProcess(t *testing.T) {
 	assert.Nil(t, process)
 	assert.ErrorIs(t, err, ErrLocalServiceNotStarted)
 
-	err = service.Start(ctx, wg)
+	err = service.StartService(ctx, wg)
 	assert.NoError(t, err)
 
 	process, err = service.CreateProcess(ctx, processName, processSpecification)
@@ -91,7 +91,7 @@ func TestLocalService_DeleteProcess(t *testing.T) {
 		AutoEnable:     true,
 	}
 
-	err = service.Start(ctx, wg)
+	err = service.StartService(ctx, wg)
 	assert.NoError(t, err)
 
 	process, err := service.CreateProcess(ctx, processName, processSpecification)
@@ -132,7 +132,7 @@ func TestLocalService_GetProcessByName(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	err = service.Start(ctx, wg)
+	err = service.StartService(ctx, wg)
 	assert.NoError(t, err)
 
 	process, err := service.CreateProcess(ctx, processName, processSpecification)
@@ -169,7 +169,7 @@ func TestLocalService_FindProcess(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	err = service.Start(ctx, wg)
+	err = service.StartService(ctx, wg)
 	assert.NoError(t, err)
 
 	process, err := service.CreateProcess(ctx, processName, processSpecification)

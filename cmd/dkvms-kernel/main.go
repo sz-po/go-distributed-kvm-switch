@@ -10,7 +10,6 @@ import (
 )
 
 func main() {
-
 	slog.SetLogLoggerLevel(slog.LevelDebug)
 
 	ctx := context.Background()
