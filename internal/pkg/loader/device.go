@@ -38,17 +38,22 @@ func (loader *DeviceLoader) Start(ctx context.Context, wg *sync.WaitGroup) error
 	wg.Add(1)
 	ticker := time.NewTicker(time.Duration(loader.config.ScanInterval))
 
+	tick := func() error {
+		if err := loader.scan(ctx); err != nil {
+			loader.logger.Error("Failed to scan for devices.", slog.String("error", err.Error()))
+			return fmt.Errorf("failed to scan for devices: %w", err)
+		}
+
+		return nil
+	}
+
+	if err := tick(); err != nil {
+		return err
+	}
+
 	go func() {
 		defer wg.Done()
 		defer ticker.Stop()
-
-		tick := func() {
-			if err := loader.scan(ctx); err != nil {
-				loader.logger.Error("Failed to scan for devices.", slog.String("error", err.Error()))
-			}
-		}
-
-		tick()
 
 		for {
 			select {
@@ -78,12 +83,12 @@ func (loader *DeviceLoader) scan(ctx context.Context) error {
 
 		loader.logger.Info("Found a new device. Loading it.", slog.String("deviceName", string(deviceName)))
 
-		device, err := loader.service.CreateDevice(ctx, deviceName, deviceSpecification)
+		newDevice, err := loader.service.CreateDevice(ctx, deviceName, deviceSpecification)
 		if err != nil {
 			return fmt.Errorf("failed to create device: %w", err)
 		}
 
-		loader.logger.Info("Device loaded.", slog.String("deviceName", string(deviceName)), slog.String("deviceKind", device.GetSpecification().Kind))
+		loader.logger.Info("Device loaded.", slog.String("deviceName", string(deviceName)), slog.String("deviceKind", newDevice.GetSpecification().Kind))
 	}
 
 	return nil
