@@ -9,8 +9,8 @@ type ServiceMock struct {
 	mock.Mock
 }
 
-func (service *ServiceMock) CreateProcess(ctx context.Context, name Name, specification Specification) (Process, error) {
-	args := service.Called(ctx, name, specification)
+func (service *ServiceMock) CreateProcess(ctx context.Context, name Name, specification Specification, opts ...ProcessOpt) (Process, error) {
+	args := service.Called(ctx, name, specification, opts)
 
 	process, _ := args.Get(0).(Process)
 	err := args.Error(1)

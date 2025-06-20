@@ -3,6 +3,7 @@ package process
 
 import (
 	"context"
+	"github.com/coder/quartz"
 	"github.com/go-playground/validator/v10"
 	"github.com/stretchr/testify/assert"
 	"github.com/sz-po/go-distributed-kvm-switch/internal/pkg/api/utils"
@@ -16,7 +17,7 @@ func TestProcess_Specification_AutoEnable(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	process, err := NewProcess(Specification{
+	process, err := NewLocalProcess(Name("foo"), Specification{
 		ExecutablePath: "/bin/sleep",
 		Arguments: []string{
 			"5",
@@ -34,7 +35,7 @@ func TestProcess_Enable(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	process, err := NewProcess(Specification{
+	process, err := NewLocalProcess(Name("foo"), Specification{
 		ExecutablePath: "/bin/sleep",
 		Arguments: []string{
 			"5",
@@ -61,7 +62,7 @@ func TestProcess_Disable(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	process, err := NewProcess(Specification{
+	process, err := NewLocalProcess(Name("foo"), Specification{
 		ExecutablePath: "/bin/sleep",
 		Arguments: []string{
 			"5",
@@ -83,7 +84,7 @@ func TestProcess_Disable(t *testing.T) {
 }
 
 func TestProcess_buildWorkingDirectory_ProvidedInSpecification(t *testing.T) {
-	process, err := NewProcess(Specification{
+	process, err := NewLocalProcess(Name("foo"), Specification{
 		ExecutablePath:       "/bin/sleep",
 		WorkingDirectoryPath: pointy.String("/tmp"),
 	})
@@ -95,7 +96,7 @@ func TestProcess_buildWorkingDirectory_ProvidedInSpecification(t *testing.T) {
 }
 
 func TestProcess_buildWorkingDirectory_ProvidedInSpecification_File(t *testing.T) {
-	process, err := NewProcess(Specification{
+	process, err := NewLocalProcess(Name("foo"), Specification{
 		ExecutablePath:       "/bin/sleep",
 		WorkingDirectoryPath: pointy.String("/bin/sleep"),
 	})
@@ -105,7 +106,7 @@ func TestProcess_buildWorkingDirectory_ProvidedInSpecification_File(t *testing.T
 }
 
 func TestProcess_buildWorkingDirectory_ProvidedInSpecification_NotExists(t *testing.T) {
-	process, err := NewProcess(Specification{
+	process, err := NewLocalProcess(Name("foo"), Specification{
 		ExecutablePath:       "/bin/sleep",
 		WorkingDirectoryPath: pointy.String("/tmp/non-existent-directory"),
 	})
@@ -114,7 +115,7 @@ func TestProcess_buildWorkingDirectory_ProvidedInSpecification_NotExists(t *test
 }
 
 func TestProcess_buildWorkingDirectory_NotProvidedInSpecification(t *testing.T) {
-	process, err := NewProcess(Specification{
+	process, err := NewLocalProcess(Name("foo"), Specification{
 		ExecutablePath:       "/bin/sleep",
 		WorkingDirectoryPath: nil,
 	})
@@ -134,14 +135,13 @@ func TestProcess_GetSpecification(t *testing.T) {
 		EnvironmentVariables: map[string]string{
 			"FOO": "BAR",
 		},
-		Arguments:    []string{"foo", "bar"},
-		RestartMode:  Always,
-		AutoEnable:   true,
-		PollInterval: utils.Duration(time.Second),
-		KillTimeout:  utils.Duration(time.Second),
+		Arguments:   []string{"foo", "bar"},
+		RestartMode: Always,
+		AutoEnable:  true,
+		KillTimeout: utils.Duration(time.Second),
 	}
 
-	process, err := NewProcess(specification)
+	process, err := NewLocalProcess(Name("foo"), specification)
 	assert.NoError(t, err)
 	assert.Equal(t, specification, process.GetSpecification())
 }
@@ -150,13 +150,13 @@ func TestProcess_Restart(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	process, err := NewProcess(Specification{
+	process, err := NewLocalProcess(Name("foo"), Specification{
 		ExecutablePath: "/bin/sleep",
 		Arguments: []string{
 			"5",
 		},
 		AutoEnable: false,
-	}, WithContext(ctx))
+	})
 	assert.NoError(t, err)
 
 	assert.Equal(t, 0, process.GetStatus().RestartCount)
@@ -176,4 +176,40 @@ func TestProcess_Restart(t *testing.T) {
 	defer timeoutCancel()
 	assert.NoError(t, process.Wait(timeoutCtx, Running))
 	assert.Equal(t, 1, process.GetStatus().RestartCount)
+}
+
+func TestCreateLocalProcessFactory(t *testing.T) {
+	processFactory := CreateLocalProcessFactory()
+	assert.NotNil(t, processFactory)
+
+	process, err := processFactory(Name("foo"), Specification{
+		ExecutablePath: "/bin/sleep",
+		Arguments: []string{
+			"5",
+		},
+		AutoEnable: false,
+	})
+	assert.NoError(t, err)
+	assert.NotNil(t, process)
+	assert.Equal(t, "/bin/sleep", process.GetSpecification().ExecutablePath)
+
+	process, err = processFactory(Name("foo"), Specification{
+		ExecutablePath: "/bin/sleep",
+		Arguments: []string{
+			"5",
+		},
+		AutoEnable: false,
+	}, WithClock(quartz.NewMock(t)))
+	assert.NoError(t, err)
+	assert.NotNil(t, process)
+
+	process, err = processFactory(Name("foo"), Specification{
+		ExecutablePath: "/bin/sleep",
+		Arguments: []string{
+			"5",
+		},
+		AutoEnable: false,
+	}, string("invalid-opt"))
+	assert.ErrorIs(t, err, ErrInvalidLocalProcessOpt)
+	assert.Nil(t, process)
 }

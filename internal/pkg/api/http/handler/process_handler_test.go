@@ -35,8 +35,8 @@ func TestProcessHandler_Create(t *testing.T) {
 
 	processName := process.Name("foo")
 
-	serviceMock.On("CreateProcess", mock.Anything, processName, processSpecification).Return(processMock, nil)
-	serviceMock.On("CreateProcess", mock.Anything, process.Name("invalid"), processSpecification).Return(nil, fmt.Errorf("invalid"))
+	serviceMock.On("CreateProcess", mock.Anything, processName, processSpecification, mock.Anything).Return(processMock, nil)
+	serviceMock.On("CreateProcess", mock.Anything, process.Name("invalid"), processSpecification, mock.Anything).Return(nil, fmt.Errorf("invalid"))
 
 	requestBody, err := json.Marshal(CreateRequest{
 		Specification: processSpecification,

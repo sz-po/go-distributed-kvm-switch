@@ -4,10 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/coder/quartz"
 	"github.com/creasty/defaults"
 	"github.com/go-playground/validator/v10"
 	"github.com/sz-po/go-distributed-kvm-switch/internal/pkg/api/utils"
 	"go.openly.dev/pointy"
+	"io"
 	"log/slog"
 	"os"
 	"os/exec"
@@ -17,9 +19,10 @@ import (
 	"time"
 )
 
-type ProcessOpt func(*LocalProcess)
+type LocalProcessOpt func(*LocalProcess)
 
 type LocalProcess struct {
+	name          Name
 	specification Specification
 
 	statusMutex *sync.Mutex
@@ -28,25 +31,64 @@ type LocalProcess struct {
 	instanceMutex *sync.Mutex
 	instance      *exec.Cmd
 
-	logger          *slog.Logger
-	controlLoopStop context.CancelFunc
-	controlLoopCtx  context.Context
+	stdin  io.Reader
+	stdout io.Writer
+	stderr io.Writer
+
+	controlLoopStop     context.CancelFunc
+	controlLoopInterval time.Duration
+
+	logger *slog.Logger
+	clock  quartz.Clock
 }
 
-func WithLogger(logger *slog.Logger) ProcessOpt {
+func WithLogger(logger *slog.Logger) LocalProcessOpt {
 	return func(p *LocalProcess) { p.logger = logger }
 }
 
-func WithContext(ctx context.Context) ProcessOpt {
-	return func(p *LocalProcess) {
-		controlLoopCtx, controlLoopStop := context.WithCancel(ctx)
-		p.controlLoopCtx = controlLoopCtx
-		p.controlLoopStop = controlLoopStop
+func WithClock(clock quartz.Clock) LocalProcessOpt {
+	return func(p *LocalProcess) { p.clock = clock }
+}
 
+func WithStdin(stdin io.Reader) LocalProcessOpt {
+	return func(p *LocalProcess) {
+		p.stdin = stdin
 	}
 }
 
-func NewProcess(specification Specification, opts ...ProcessOpt) (*LocalProcess, error) {
+func WithStdout(stdout io.Writer) LocalProcessOpt {
+	return func(p *LocalProcess) {
+		p.stdout = stdout
+	}
+}
+
+func WithStderr(stderr io.Writer) LocalProcessOpt {
+	return func(p *LocalProcess) {
+		p.stderr = stderr
+	}
+}
+
+func CreateLocalProcessFactory() ProcessFactory {
+	return func(name Name, specification Specification, opts ...ProcessOpt) (Process, error) {
+		var localProcessOpts []LocalProcessOpt
+
+		for _, opt := range opts {
+			if localOpt, ok := opt.(LocalProcessOpt); ok {
+				localProcessOpts = append(localProcessOpts, localOpt)
+			} else {
+				return nil, fmt.Errorf("%w: %T", ErrInvalidLocalProcessOpt, opt)
+			}
+		}
+
+		return NewLocalProcess(name, specification, localProcessOpts...)
+	}
+}
+
+func NewLocalProcess(name Name, specification Specification, opts ...LocalProcessOpt) (*LocalProcess, error) {
+	if err := name.Validate(); err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrInvalidProcessName, err)
+	}
+
 	if err := defaults.Set(&specification); err != nil {
 		return nil, fmt.Errorf("failed to set defaults: %w", err)
 	}
@@ -57,7 +99,8 @@ func NewProcess(specification Specification, opts ...ProcessOpt) (*LocalProcess,
 		return nil, fmt.Errorf("failed to validate specification: %w", err)
 	}
 
-	p := &LocalProcess{
+	process := &LocalProcess{
+		name:          name,
 		specification: specification,
 		statusMutex:   &sync.Mutex{},
 		status: Status{
@@ -69,70 +112,76 @@ func NewProcess(specification Specification, opts ...ProcessOpt) (*LocalProcess,
 		instanceMutex: &sync.Mutex{},
 		instance:      nil,
 
+		controlLoopInterval: 100 * time.Millisecond,
+
 		logger: slog.Default(),
+		clock:  quartz.NewReal(),
 	}
 
-	// apply user‑supplied options
 	for _, opt := range opts {
-		opt(p)
+		opt(process)
 	}
 
-	p.logger = p.logger.With(slog.String("componentName", "LocalProcess"))
+	process.logger = process.logger.With(
+		slog.String("componentName", "LocalProcess"),
+		slog.String("processName", string(process.name)),
+	)
 
-	// start control loop in its own cancellable context
-	ctx, cancel := context.WithCancel(context.Background())
-	p.controlLoopStop = cancel
-	go p.controlLoop(ctx)
+	ctx := context.Background()
 
-	return p, nil
+	controlLoopCtx, controlLoopStop := context.WithCancel(ctx)
+	process.controlLoopStop = controlLoopStop
+	go process.controlLoop(controlLoopCtx)
+
+	return process, nil
 }
 
-func (p *LocalProcess) GetStatus() Status {
-	p.statusMutex.Lock()
-	defer p.statusMutex.Unlock()
-	return p.status
+func (process *LocalProcess) GetStatus() Status {
+	process.statusMutex.Lock()
+	defer process.statusMutex.Unlock()
+	return process.status
 }
 
-func (p *LocalProcess) GetSpecification() Specification { return p.specification }
+func (process *LocalProcess) GetSpecification() Specification { return process.specification }
 
-func (p *LocalProcess) Enable(ctx context.Context) error {
-	p.statusMutex.Lock()
-	defer p.statusMutex.Unlock()
+func (process *LocalProcess) Enable(ctx context.Context) error {
+	process.statusMutex.Lock()
+	defer process.statusMutex.Unlock()
 
-	if p.status.Enabled {
+	if process.status.Enabled {
 		return ErrProcessAlreadyEnabled
 	}
-	p.status.Enabled = true
-	p.logger.Info("Local process enabled.")
+	process.status.Enabled = true
+	process.logger.Info("Local process enabled.")
 	return nil
 }
 
-func (p *LocalProcess) Disable(ctx context.Context) error {
-	p.statusMutex.Lock()
-	defer p.statusMutex.Unlock()
+func (process *LocalProcess) Disable(ctx context.Context) error {
+	process.statusMutex.Lock()
+	defer process.statusMutex.Unlock()
 
-	if !p.status.Enabled {
+	if !process.status.Enabled {
 		return ErrProcessAlreadyDisabled
 	}
-	p.status.Enabled = false
-	p.logger.Info("Local process disabled.")
+	process.status.Enabled = false
+	process.logger.Info("Local process disabled.")
 	return nil
 }
 
-func (p *LocalProcess) Restart(ctx context.Context) error {
-	if err := p.Disable(ctx); err != nil {
+func (process *LocalProcess) Restart(ctx context.Context) error {
+	if err := process.Disable(ctx); err != nil {
 		return fmt.Errorf("failed to disable process: %w", err)
 	}
-	if err := p.Wait(ctx, Idle); err != nil {
+	if err := process.Wait(ctx, Idle); err != nil {
 		return fmt.Errorf("failed to wait for process to stop: %w", err)
 	}
-	if err := p.Enable(ctx); err != nil {
+	if err := process.Enable(ctx); err != nil {
 		return fmt.Errorf("failed to enable process: %w", err)
 	}
 	return nil
 }
 
-func (p *LocalProcess) Wait(ctx context.Context, phase Phase) error {
+func (process *LocalProcess) Wait(ctx context.Context, phase Phase) error {
 	ticker := time.NewTicker(50 * time.Millisecond)
 	defer ticker.Stop()
 
@@ -141,9 +190,9 @@ func (p *LocalProcess) Wait(ctx context.Context, phase Phase) error {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-ticker.C:
-			p.statusMutex.Lock()
-			currentPhase := p.status.Phase
-			p.statusMutex.Unlock()
+			process.statusMutex.Lock()
+			currentPhase := process.status.Phase
+			process.statusMutex.Unlock()
 			if currentPhase == phase {
 				return nil
 			}
@@ -151,78 +200,90 @@ func (p *LocalProcess) Wait(ctx context.Context, phase Phase) error {
 	}
 }
 
-func (p *LocalProcess) startInstance() error {
+func (process *LocalProcess) startInstance() error {
 	var err error
 
-	p.instanceMutex.Lock()
-	defer p.instanceMutex.Unlock()
+	process.instanceMutex.Lock()
+	defer process.instanceMutex.Unlock()
 
-	p.statusMutex.Lock()
-	defer p.statusMutex.Unlock()
+	process.statusMutex.Lock()
+	defer process.statusMutex.Unlock()
 
-	if p.instance != nil {
+	if process.instance != nil {
 		return ErrProcessAlreadyRunning
 	}
 
-	if p.status.ProcessId != nil {
-		p.status.RestartCount++
+	if process.status.ProcessId != nil {
+		process.status.RestartCount++
 	}
 
 	// reset status fields from any previous run
-	p.status.ProcessId = nil
-	p.status.ExitCode = nil
-	p.status.ErrorMessage = nil
-	p.status.Phase = Idle
+	process.status.ProcessId = nil
+	process.status.ExitCode = nil
+	process.status.ErrorMessage = nil
+	process.status.Phase = Idle
 
 	cmd := exec.Command(
-		p.specification.ExecutablePath,
-		p.specification.Arguments...,
+		process.specification.ExecutablePath,
+		process.specification.Arguments...,
 	)
 
-	if cmd.Dir, err = p.buildWorkingDirectory(); err != nil {
-		p.status.FailureCount++
-		p.status.ErrorMessage = pointy.String(err.Error())
+	if process.stdin != nil {
+		cmd.Stdin = process.stdin
+	}
+
+	if process.stdout != nil {
+		cmd.Stdout = process.stdout
+	}
+
+	if process.stderr != nil {
+		cmd.Stderr = process.stderr
+	}
+
+	if cmd.Dir, err = process.buildWorkingDirectory(); err != nil {
+		process.status.FailureCount++
+		process.status.ErrorMessage = pointy.String(err.Error())
 		return fmt.Errorf("failed to build working directory: %w", err)
 	}
-	p.status.WorkingDirectoryPath = pointy.String(cmd.Dir)
+	process.status.WorkingDirectoryPath = pointy.String(cmd.Dir)
 
 	// environment
-	if cmd.Env, p.status.EnvironmentVariables, err = p.buildEnvironmentVariables(); err != nil {
-		p.status.FailureCount++
-		p.status.ErrorMessage = pointy.String(err.Error())
+	if cmd.Env, process.status.EnvironmentVariables, err = process.buildEnvironmentVariables(); err != nil {
+		process.status.FailureCount++
+		process.status.ErrorMessage = pointy.String(err.Error())
 		return fmt.Errorf("failed to build environment variables: %w", err)
 	}
 
 	// actually start
 	if err = cmd.Start(); err != nil {
-		p.status.FailureCount++
-		p.status.ErrorMessage = pointy.String(err.Error())
+		process.status.FailureCount++
+		process.status.ErrorMessage = pointy.String(err.Error())
 		return fmt.Errorf("failed to start process: %w", err)
 	}
 
-	p.status.ProcessId = pointy.Int(cmd.Process.Pid)
-	p.status.Phase = Running
-	p.instance = cmd
-	p.logger.Info("Local process started.", slog.Int("processId", cmd.Process.Pid))
+	process.status.ProcessId = pointy.Int(cmd.Process.Pid)
+	process.status.Phase = Running
+	process.instance = cmd
+	process.logger.Info("Local process started.", slog.Int("processId", cmd.Process.Pid))
 
-	go p.watchInstance()
+	go process.watchInstance()
 	return nil
 }
 
-func (p *LocalProcess) stopInstance(timeout time.Duration) error {
-	p.instanceMutex.Lock()
-	cmd := p.instance
-	p.instanceMutex.Unlock()
+func (process *LocalProcess) stopInstance(timeout time.Duration) error {
+	process.instanceMutex.Lock()
+	cmd := process.instance
+	process.instanceMutex.Unlock()
 
 	if cmd == nil {
 		return ErrProcessNotRunning
 	}
 
-	logger := p.logger.With(slog.Int("processId", cmd.Process.Pid))
+	logger := process.logger.With(slog.Int("processId", cmd.Process.Pid))
 
-	p.statusMutex.Lock()
-	p.status.Phase = Terminating
-	p.statusMutex.Unlock()
+	process.statusMutex.Lock()
+	process.status.Phase = Terminating
+	process.statusMutex.Unlock()
 
 	logger.Debug("Sending SIGTERM to the process.")
 	if termErr := cmd.Process.Signal(syscall.SIGTERM); termErr != nil {
@@ -231,14 +292,14 @@ func (p *LocalProcess) stopInstance(timeout time.Duration) error {
 
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
-	if err := p.Wait(ctx, Idle); err == nil {
+	if err := process.Wait(ctx, Idle); err == nil {
 		logger.Info("Local process terminated gracefully.")
 		return nil
 	}
 
-	p.statusMutex.Lock()
-	p.status.Phase = Killing
-	p.statusMutex.Unlock()
+	process.statusMutex.Lock()
+	process.status.Phase = Killing
+	process.statusMutex.Unlock()
 
 	logger.Debug("Sending SIGKILL to the process.")
 	if killErr := cmd.Process.Kill(); killErr != nil {
@@ -247,7 +308,7 @@ func (p *LocalProcess) stopInstance(timeout time.Duration) error {
 
 	ctx, cancel = context.WithTimeout(context.Background(), timeout)
 	defer cancel()
-	if err := p.Wait(ctx, Idle); err != nil {
+	if err := process.Wait(ctx, Idle); err != nil {
 		logger.Info("Local process not killed within timeout.")
 		return nil
 	}
@@ -256,52 +317,65 @@ func (p *LocalProcess) stopInstance(timeout time.Duration) error {
 	return nil
 }
 
-func (p *LocalProcess) watchInstance() {
-	p.instanceMutex.Lock()
-	cmd := p.instance
-	p.instanceMutex.Unlock()
+func (process *LocalProcess) watchInstance() {
+	process.instanceMutex.Lock()
+	cmd := process.instance
+	process.instanceMutex.Unlock()
 
-	logger := p.logger.With(slog.Int("processId", cmd.Process.Pid))
+	logger := process.logger.With(slog.Int("processId", cmd.Process.Pid))
 	logger.Debug("Watching process.")
 
 	err := cmd.Wait()
 
-	p.statusMutex.Lock()
-	defer p.statusMutex.Unlock()
+	process.statusMutex.Lock()
+	defer process.statusMutex.Unlock()
 
 	if err != nil {
 		var exitErr *exec.ExitError
 		if errors.As(err, &exitErr) {
-			p.status.ExitCode = pointy.Int(exitErr.ExitCode())
+			process.status.ExitCode = pointy.Int(exitErr.ExitCode())
 			logger = logger.With(slog.Int("exitCode", exitErr.ExitCode()))
 		}
-		p.status.ErrorMessage = pointy.String(err.Error())
-		p.status.FailureCount++
-		logger.Warn("Local process finished with an error.", slog.String("error", err.Error()))
+		process.status.ErrorMessage = pointy.String(err.Error())
+		process.status.FailureCount++
+
+		if process.status.FailureBackoff <= 0 {
+			process.status.FailureBackoff = utils.Duration(time.Second)
+		}
+		if process.status.FailureBackoff >= utils.Duration(time.Second*30) {
+			process.status.FailureBackoff = utils.Duration(time.Second * 30)
+		}
+
+		process.status.FailureBackoff *= 2
+
+		logger.Warn("Local process finished with an error.", slog.String("error", err.Error()), slog.Duration("backoff", time.Duration(process.status.FailureBackoff)))
+
+		time.Sleep(time.Duration(process.status.FailureBackoff))
 	} else {
-		p.status.ExitCode = pointy.Int(0)
+		process.status.FailureBackoff = 0
+		process.status.ExitCode = pointy.Int(0)
 		logger.Info("Local process finished successfully.")
 	}
 
-	p.status.Phase = Idle
-	p.status.WorkingDirectoryPath = nil
+	process.status.Phase = Idle
+	process.status.WorkingDirectoryPath = nil
 
-	p.instanceMutex.Lock()
-	p.instance = nil
-	p.instanceMutex.Unlock()
+	process.instanceMutex.Lock()
+	process.instance = nil
+	process.instanceMutex.Unlock()
 }
 
-func (p *LocalProcess) buildWorkingDirectory() (string, error) {
-	if p.specification.WorkingDirectoryPath != nil {
-		return *p.specification.WorkingDirectoryPath, nil
+func (process *LocalProcess) buildWorkingDirectory() (string, error) {
+	if process.specification.WorkingDirectoryPath != nil {
+		return *process.specification.WorkingDirectoryPath, nil
 	}
 	return os.Getwd()
 }
 
-func (p *LocalProcess) buildEnvironmentVariables() ([]string, map[string]string, error) {
+func (process *LocalProcess) buildEnvironmentVariables() ([]string, map[string]string, error) {
 	envMap := map[string]string{}
 
-	if p.specification.InheritEnvironmentVariables {
+	if process.specification.InheritEnvironmentVariables {
 		for _, variable := range os.Environ() {
 			k, v, ok := strings.Cut(variable, "=")
 			if !ok {
@@ -311,7 +385,7 @@ func (p *LocalProcess) buildEnvironmentVariables() ([]string, map[string]string,
 		}
 	}
 
-	for k, v := range p.specification.EnvironmentVariables {
+	for k, v := range process.specification.EnvironmentVariables {
 		envMap[k] = v
 	}
 
@@ -322,37 +396,39 @@ func (p *LocalProcess) buildEnvironmentVariables() ([]string, map[string]string,
 	return list, envMap, nil
 }
 
-func (p *LocalProcess) controlLoop(ctx context.Context) {
-	p.logger.Debug("Starting the control loop.")
+func (process *LocalProcess) controlLoop(ctx context.Context) {
+	process.logger.Debug("Starting the control loop.")
 
-	ticker := time.NewTicker(1 * time.Duration(p.specification.PollInterval))
+	ticker := process.clock.NewTicker(process.controlLoopInterval)
 	defer ticker.Stop()
 
 	for {
 		select {
 		case <-ctx.Done():
-			p.logger.Debug("The control loop has been stopped.")
+			process.logger.Debug("The control loop has been stopped.")
 			return
 		case <-ticker.C:
-			if err := p.controlFn(); err != nil {
-				p.logger.Warn("Failed to control the process.", slog.String("error", err.Error()))
+			if err := process.controlFn(); err != nil {
+				process.logger.Warn("Failed to control the process.", slog.String("error", err.Error()))
 			}
 		}
 	}
 }
 
-func (p *LocalProcess) controlFn() error {
-	p.statusMutex.Lock()
-	phase := p.status.Phase
-	enabled := p.status.Enabled
-	p.statusMutex.Unlock()
+func (process *LocalProcess) controlFn() error {
+	process.statusMutex.Lock()
+	phase := process.status.Phase
+	enabled := process.status.Enabled
+	process.statusMutex.Unlock()
 
 	switch {
 	case enabled && phase == Idle:
-		return p.startInstance()
+		return process.startInstance()
 	case !enabled && phase == Running:
-		return p.stopInstance(time.Duration(p.specification.KillTimeout))
+		return process.stopInstance(time.Duration(process.specification.KillTimeout))
 	default:
 		return nil
 	}
 }
+
+var ErrInvalidLocalProcessOpt = errors.New("invalid local process opt")

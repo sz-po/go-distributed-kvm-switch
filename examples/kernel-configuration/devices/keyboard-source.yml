@@ -1,4 +1,5 @@
 kind: dummy-keyboard-source
+autoEnable: true
 config:
   randomKeystrokes:
     enabled: true

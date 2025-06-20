@@ -3,7 +3,21 @@ package process
 import (
 	"context"
 	"github.com/stretchr/testify/mock"
+	"testing"
 )
+
+func CreateProcessFactoryMock(t *testing.T) (ProcessFactory, *mock.Mock) {
+	mock := &mock.Mock{}
+
+	return func(name Name, specification Specification, opts ...ProcessOpt) (Process, error) {
+		args := mock.Called(name, specification, opts)
+
+		process, _ := args.Get(0).(Process)
+		err := args.Error(1)
+
+		return process, err
+	}, mock
+}
 
 type ProcessMock struct {
 	mock.Mock

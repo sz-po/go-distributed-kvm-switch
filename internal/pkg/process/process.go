@@ -4,7 +4,10 @@ import (
 	"context"
 	"fmt"
 	"github.com/sz-po/go-distributed-kvm-switch/internal/pkg/api/utils"
+	"regexp"
 )
+
+type ProcessOpt any
 
 // Name represents a unique identifier for a instance.
 type Name string
@@ -68,9 +71,6 @@ type Specification struct {
 	// AutoEnable indicates whether the process instance should be enabled automatically when it is created.
 	AutoEnable bool `json:"autoEnable"`
 
-	// PollInterval is the interval at which the process should check status of the instance.
-	PollInterval utils.Duration `json:"poolInterval" default:"100ms"`
-
 	// KillTimeout is the maximum amount of time that the process should wait for the instance to be killed after
 	// unsuccessful termination.
 	KillTimeout utils.Duration `json:"killTimeout" default:"5s"`
@@ -104,6 +104,9 @@ type Status struct {
 	// with a non-zero exit code (i.e., a failure).
 	FailureCount int `json:"failureCount"`
 
+	// FailureBackoff is the current backoff duration after a failure.
+	FailureBackoff utils.Duration `json:"failureBackoff"`
+
 	// EnvironmentVariables is a map of environment variable key-value pairs that were injected into the new process
 	// instance. It may be different from the original specification, if InheritEnvironmentVariables is true.
 	EnvironmentVariables map[string]string `json:"environmentVariables"`
@@ -112,6 +115,8 @@ type Status struct {
 	// the original specification, if WorkingDirectoryPath is not nil (inherit the caller's working directory).
 	WorkingDirectoryPath *string `json:"workingDirectoryPath,omitempty"`
 }
+
+type ProcessFactory func(name Name, specification Specification, opts ...ProcessOpt) (Process, error)
 
 type Process interface {
 	GetStatus() Status
@@ -122,7 +127,17 @@ type Process interface {
 	Wait(ctx context.Context, phase Phase) error
 }
 
+func (name Name) Validate() error {
+	regex := regexp.MustCompile("^[a-z0-9-]+$")
+
+	if !regex.MatchString(string(name)) {
+		return fmt.Errorf("name must only contain small letters and hyphens")
+	}
+	return nil
+}
+
 var ErrProcessAlreadyRunning = fmt.Errorf("process already running")
 var ErrProcessNotRunning = fmt.Errorf("process not running")
 var ErrProcessAlreadyEnabled = fmt.Errorf("process already enabled")
 var ErrProcessAlreadyDisabled = fmt.Errorf("process already disabled")
+var ErrInvalidProcessName = fmt.Errorf("invalid process name")

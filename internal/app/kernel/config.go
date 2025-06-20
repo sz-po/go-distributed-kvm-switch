@@ -5,12 +5,10 @@ import (
 	"github.com/sz-po/go-distributed-kvm-switch/internal/pkg/device"
 	"github.com/sz-po/go-distributed-kvm-switch/internal/pkg/loader"
 	"github.com/sz-po/go-distributed-kvm-switch/internal/pkg/loader/source"
-	"github.com/sz-po/go-distributed-kvm-switch/internal/pkg/process"
 )
 
 type ServiceConfig struct {
-	Process process.LocalServiceConfig `kong:"embed,prefix=process-"`
-	Device  device.LocalServiceConfig  `kong:"embed,prefix=device-"`
+	Device device.LocalServiceConfig `kong:"embed,prefix=device-"`
 }
 
 type ApiConfig struct {

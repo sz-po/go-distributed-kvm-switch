@@ -4,6 +4,7 @@ go 1.22
 
 require (
 	github.com/alecthomas/kong v1.11.0
+	github.com/coder/quartz v0.2.1
 	github.com/creasty/defaults v1.8.0
 	github.com/go-chi/chi/v5 v5.2.1
 	github.com/go-playground/validator/v10 v10.26.0
