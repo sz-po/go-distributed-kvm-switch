@@ -8,10 +8,6 @@ import (
 	"testing"
 )
 
-/* ------------------------------------------------------------------
-   Test 1: stdin jest zdublowany – oba potoki dostają ten sam strumień
------------------------------------------------------------------- */
-
 func TestStdioMux_ReadDuplication(t *testing.T) {
 	const input = "hello world\nsecond line\n"
 
@@ -26,8 +22,7 @@ func TestStdioMux_ReadDuplication(t *testing.T) {
 
 	var srvData, cliData []byte
 	var srvErr, cliErr error
-
-	// czytamy z obu ReadWriterów równolegle
+	
 	go func() {
 		defer wg.Done()
 		srvData, srvErr = io.ReadAll(mux.ServerPipe())
@@ -54,12 +49,8 @@ func TestStdioMux_ReadDuplication(t *testing.T) {
 	}
 }
 
-/* ------------------------------------------------------------------
-   Test 2: równoległe zapisy są serializowane – nie ma przeplatania bajtów
------------------------------------------------------------------- */
-
 func TestStdioMux_ConcurrentWrites(t *testing.T) {
-	stdin := strings.NewReader("") // wejście tu nie jest potrzebne
+	stdin := strings.NewReader("")
 	var stdout bytes.Buffer
 
 	mux := NewStdioMux(stdin, &stdout)
@@ -84,15 +75,10 @@ func TestStdioMux_ConcurrentWrites(t *testing.T) {
 
 	got := stdout.String()
 
-	// Dozwolone są dwie poprawne kolejności: "serverclient" lub "clientserver".
 	if got != "serverclient" && got != "clientserver" {
 		t.Fatalf("unexpected combined output: %q", got)
 	}
 }
-
-/* ------------------------------------------------------------------
-   Test 3: Close() poprawnie zamyka wewnętrzne zasoby
------------------------------------------------------------------- */
 
 func TestStdioMux_Close(t *testing.T) {
 	stdin := strings.NewReader("")
@@ -104,6 +90,5 @@ func TestStdioMux_Close(t *testing.T) {
 		t.Fatalf("first Close() returned error: %v", err)
 	}
 
-	// drugie Close() może, ale nie musi zwrócić błąd; ważne, by nie panicowało
 	_ = mux.Close()
 }
