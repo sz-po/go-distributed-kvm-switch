@@ -2,6 +2,7 @@ package utils
 
 import (
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -27,7 +28,8 @@ func (t *Duration) MarshalJSON() ([]byte, error) {
 }
 
 func (t *Duration) UnmarshalJSON(b []byte) error {
-	d, err := time.ParseDuration(string(b))
+	stripped := strings.Trim(string(b), "\"")
+	d, err := time.ParseDuration(stripped)
 	if err != nil {
 		return err
 	}

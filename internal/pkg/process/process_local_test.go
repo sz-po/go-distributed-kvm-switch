@@ -6,7 +6,7 @@ import (
 	"github.com/coder/quartz"
 	"github.com/go-playground/validator/v10"
 	"github.com/stretchr/testify/assert"
-	"github.com/sz-po/go-distributed-kvm-switch/internal/pkg/api/utils"
+	"github.com/sz-po/go-distributed-kvm-switch/pkg/utils"
 	"go.openly.dev/pointy"
 	"os"
 	"testing"

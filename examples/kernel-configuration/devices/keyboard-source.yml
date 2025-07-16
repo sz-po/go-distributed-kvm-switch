@@ -1,10 +1,10 @@
 kind: dummy-keyboard-source
 autoEnable: true
 config:
-  randomKeystrokes:
+  randomKeystroke:
     enabled: true
     interval:
-      from: 100ms
+      from: 1s
       to: 5s
     characters:
       smallLetters: true

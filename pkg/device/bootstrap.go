@@ -2,14 +2,19 @@ package device
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/creasty/defaults"
+	"github.com/go-playground/validator/v10"
 	"os"
 	"os/signal"
 	"sync"
 )
 
 const DeviceNameEnvironmentKey = "DKVMS_DEVICE_NAME"
+const DeviceConfigEnvironmentKey = "DKVMS_DEVICE_CONFIG"
 
 type BootstrapOpt func(*BootstrapConfig)
 
@@ -63,10 +68,41 @@ func readDeviceName() (*DeviceName, error) {
 }
 
 func readDeviceConfig[CONFIG DeviceConfig]() (*CONFIG, error) {
-	panic("not implemented")
+	var config CONFIG
+
+	configBufferEncoded := []byte(os.Getenv(DeviceConfigEnvironmentKey))
+	if len(configBufferEncoded) == 0 {
+		return nil, ErrMissingDeviceConfig
+	}
+
+	var configBuffer []byte
+	configBuffer, err := base64.StdEncoding.DecodeString(string(configBufferEncoded))
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode config: %w", err)
+	}
+
+	err = json.Unmarshal(configBuffer, &config)
+	if err != nil {
+		return nil, fmt.Errorf("failed to unmarshal config: %w", err)
+	}
+
+	err = defaults.Set(&config)
+	if err != nil {
+		return nil, fmt.Errorf("failed to set defaults: %w", err)
+	}
+
+	configValidator := validator.New(validator.WithRequiredStructEnabled())
+
+	err = configValidator.Struct(config)
+	if err != nil {
+		return nil, fmt.Errorf("failed to validate config: %w", err)
+	}
+
+	return &config, nil
 }
 
 var ErrMissingDeviceName = errors.New("missing device name")
+var ErrMissingDeviceConfig = errors.New("missing device config")
 
 func NewBootstrap[CONFIG DeviceConfig](opts ...BootstrapOpt) (*BootstrapConfig, error) {
 	return &BootstrapConfig{}, nil

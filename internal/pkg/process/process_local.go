@@ -7,7 +7,7 @@ import (
 	"github.com/coder/quartz"
 	"github.com/creasty/defaults"
 	"github.com/go-playground/validator/v10"
-	"github.com/sz-po/go-distributed-kvm-switch/internal/pkg/api/utils"
+	"github.com/sz-po/go-distributed-kvm-switch/pkg/utils"
 	"go.openly.dev/pointy"
 	"io"
 	"log/slog"

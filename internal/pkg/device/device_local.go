@@ -2,6 +2,8 @@ package device
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"github.com/coder/quartz"
 	"github.com/creasty/defaults"
@@ -104,10 +106,16 @@ func NewLocalDevice(name Name, specification Specification, opts ...LocalDeviceO
 		opt(device)
 	}
 
+	deviceConfig, err := json.Marshal(specification.Config)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal config: %w", err)
+	}
+
 	processSpecification := process.Specification{
 		ExecutablePath: path.Join(device.processExecutableDirectory, device.processExecutableName),
 		EnvironmentVariables: map[string]string{
-			device_sdk.DeviceNameEnvironmentKey: string(device.name),
+			device_sdk.DeviceNameEnvironmentKey:   string(device.name),
+			device_sdk.DeviceConfigEnvironmentKey: base64.StdEncoding.EncodeToString(deviceConfig),
 		},
 		RestartMode: process.Always,
 		AutoEnable:  false,

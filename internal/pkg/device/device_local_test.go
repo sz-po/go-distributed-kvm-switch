@@ -2,6 +2,7 @@ package device
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"github.com/coder/quartz"
 	"github.com/stretchr/testify/assert"
@@ -26,7 +27,7 @@ func TestNewLocalDevice(t *testing.T) {
 		Config: map[string]any{
 			"foo": "bar",
 		},
-	}, WithLocalDeviceClock(clock), WithLocalDeviceProcessFactory(processFactory))
+	}, WithLocalDeviceClock(clock), WithLocalDeviceProcessFactory(processFactory), WithLocalDeviceProcessExecutableDirectory("/test"))
 	assert.ErrorIs(t, err, processFactoryErr)
 	assert.Nil(t, device)
 
@@ -42,7 +43,8 @@ func TestNewLocalDevice(t *testing.T) {
 	processFactoryMock.AssertCalled(t, "func1", process.Name("device-bar-foo"), process.Specification{
 		ExecutablePath: "/test/dkvms-device-bar",
 		EnvironmentVariables: map[string]string{
-			device_sdk.DeviceNameEnvironmentKey: "foo",
+			device_sdk.DeviceNameEnvironmentKey:   "foo",
+			device_sdk.DeviceConfigEnvironmentKey: base64.StdEncoding.EncodeToString([]byte(`{"foo":"bar"}`)),
 		},
 		RestartMode: process.Always,
 		AutoEnable:  false,

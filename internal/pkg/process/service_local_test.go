@@ -6,7 +6,7 @@ import (
 	"github.com/coder/quartz"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
-	"github.com/sz-po/go-distributed-kvm-switch/internal/pkg/api/utils"
+	"github.com/sz-po/go-distributed-kvm-switch/pkg/utils"
 	"log/slog"
 	"testing"
 	"time"

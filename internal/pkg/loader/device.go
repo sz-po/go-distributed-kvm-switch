@@ -3,8 +3,8 @@ package loader
 import (
 	"context"
 	"fmt"
-	"github.com/sz-po/go-distributed-kvm-switch/internal/pkg/api/utils"
 	"github.com/sz-po/go-distributed-kvm-switch/internal/pkg/device"
+	"github.com/sz-po/go-distributed-kvm-switch/pkg/utils"
 	"log/slog"
 	"sync"
 	"time"
