@@ -1,5 +1,7 @@
 package protocol
 
+import "github.com/google/uuid"
+
 type CallId string
 type ServiceName string
 type MethodName string
@@ -20,4 +22,8 @@ type MethodResultMessage struct {
 	CallId  CallId  `json:"callId"`
 	Payload any     `json:"payload"`
 	Error   *string `json:"error,omitempty"`
+}
+
+func CreateRandomCallId() CallId {
+	return CallId(uuid.NewString())
 }

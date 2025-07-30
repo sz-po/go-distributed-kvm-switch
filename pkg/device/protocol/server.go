@@ -39,7 +39,7 @@ func NewServer(pipe io.ReadWriter, serviceRegistry *ServiceRegistry, opts ...Ser
 	}
 
 	server.logger = server.logger.With(
-		slog.String("componentName", "JsonProtocolServer"),
+		slog.String("componentName", "ProtocolServer"),
 	)
 
 	return server
@@ -75,17 +75,21 @@ func (server *Server) readLoop(ctx context.Context, wg *sync.WaitGroup, reader i
 	decoder := json.NewDecoder(reader)
 
 	for decoder.More() {
-		methodCall := MethodCallMessage{}
+		message := MessageEnvelope{}
 
-		if err := decoder.Decode(&methodCall); errors.Is(err, io.EOF) {
+		if err := decoder.Decode(&message); errors.Is(err, io.EOF) {
 			server.logger.Debug("Reached end of stream while reading.")
 			return
 		} else if err != nil {
-			server.logger.Warn("Failed to decode method call.", slog.String("error", err.Error()))
+			server.logger.Warn("Failed to decode message.", slog.String("error", err.Error()))
 			continue
 		}
 
-		server.callQueue <- methodCall
+		if message.Call == nil {
+			continue
+		}
+
+		server.callQueue <- *message.Call
 	}
 }
 
@@ -97,7 +101,9 @@ func (server *Server) writeLoop(ctx context.Context, wg *sync.WaitGroup, writer 
 	for {
 		select {
 		case methodResult := <-server.resultQueue:
-			if err := json.NewEncoder(writer).Encode(methodResult); err != nil {
+			if err := json.NewEncoder(writer).Encode(MessageEnvelope{
+				Result: &methodResult,
+			}); err != nil {
 				server.logger.Warn("Failed to encode method result.", slog.String("error", err.Error()))
 			}
 			if bufioReadWriter, ok := server.pipe.(*bufio.ReadWriter); ok {

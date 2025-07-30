@@ -22,7 +22,7 @@ func TestStdioMux_ReadDuplication(t *testing.T) {
 
 	var srvData, cliData []byte
 	var srvErr, cliErr error
-	
+
 	go func() {
 		defer wg.Done()
 		srvData, srvErr = io.ReadAll(mux.ServerPipe())

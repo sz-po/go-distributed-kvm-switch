@@ -65,6 +65,10 @@ func (runtime *Runtime) Start(ctx context.Context, wg *sync.WaitGroup) error {
 		return fmt.Errorf("failed to start protocol server: %w", err)
 	}
 
+	if err := runtime.protocolClient.Start(ctx, wg); err != nil {
+		return fmt.Errorf("failed to start protocol client: %w", err)
+	}
+
 	go func() {
 		<-ctx.Done()
 		wg.Done()

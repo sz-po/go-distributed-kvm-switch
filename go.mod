@@ -8,8 +8,10 @@ require (
 	github.com/creasty/defaults v1.8.0
 	github.com/go-chi/chi/v5 v5.2.1
 	github.com/go-playground/validator/v10 v10.26.0
+	github.com/google/uuid v1.6.0
 	github.com/stretchr/testify v1.9.0
 	go.openly.dev/pointy v1.3.0
+	golang.org/x/net v0.34.0
 	sigs.k8s.io/yaml v1.4.0
 )
 
@@ -23,7 +25,6 @@ require (
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/stretchr/objx v0.5.2 // indirect
 	golang.org/x/crypto v0.33.0 // indirect
-	golang.org/x/net v0.34.0 // indirect
 	golang.org/x/sys v0.30.0 // indirect
 	golang.org/x/text v0.22.0 // indirect
 	gopkg.in/check.v1 v1.0.0-20200227125254-8fa46927fb4f // indirect

@@ -34,29 +34,34 @@ func TestServer(t *testing.T) {
 	clientPipe, serverPipe := net.Pipe()
 	clientEncoder := json.NewEncoder(clientPipe)
 	clientDecoder := json.NewDecoder(clientPipe)
-	jsonServer := NewServer(serverPipe, serviceRegistry)
+	server := NewServer(serverPipe, serviceRegistry)
 
 	wg := &sync.WaitGroup{}
 	ctx, cancel := context.WithCancel(context.Background())
 
-	err := jsonServer.Start(ctx, wg)
+	err := server.Start(ctx, wg)
 	assert.NoError(t, err)
 
 	/*
 	 * Call non-existing service
 	 */
 
-	err = clientEncoder.Encode(MethodCallMessage{
-		CallId:      CallId("call-1"),
-		ServiceName: ServiceName("non-existing"),
-		MethodName:  MethodName("non-existing"),
-		Payload:     nil,
+	err = clientEncoder.Encode(MessageEnvelope{
+		Call: &MethodCallMessage{
+			CallId:      CallId("call-1"),
+			ServiceName: ServiceName("non-existing"),
+			MethodName:  MethodName("non-existing"),
+			Payload:     nil,
+		},
 	})
 	assert.NoError(t, err)
 	time.Sleep(10 * time.Millisecond)
 
-	methodResult := MethodResultMessage{}
-	err = clientDecoder.Decode(&methodResult)
+	message := MessageEnvelope{}
+	err = clientDecoder.Decode(&message)
+	assert.NoError(t, err)
+	assert.NotNil(t, message.Result)
+	methodResult := message.Result
 	assert.NoError(t, err)
 	assert.Equal(t, CallId("call-1"), methodResult.CallId)
 	assert.Equal(t, ErrServiceNotFound.Error(), *methodResult.Error)
@@ -66,18 +71,22 @@ func TestServer(t *testing.T) {
 	 * Call existing service but non-existing method
 	 */
 
-	err = clientEncoder.Encode(MethodCallMessage{
-		CallId:      CallId("call-2"),
-		ServiceName: ServiceName("foo"),
-		MethodName:  MethodName("non-existing"),
-		Payload:     nil,
+	err = clientEncoder.Encode(MessageEnvelope{
+		Call: &MethodCallMessage{
+			CallId:      CallId("call-2"),
+			ServiceName: ServiceName("foo"),
+			MethodName:  MethodName("non-existing"),
+			Payload:     nil,
+		},
 	})
 	assert.NoError(t, err)
 	time.Sleep(10 * time.Millisecond)
 
-	methodResult = MethodResultMessage{}
-	err = clientDecoder.Decode(&methodResult)
+	message = MessageEnvelope{}
+	err = clientDecoder.Decode(&message)
 	assert.NoError(t, err)
+	assert.NotNil(t, message.Result)
+	methodResult = message.Result
 	assert.Equal(t, CallId("call-2"), methodResult.CallId)
 	assert.Equal(t, ErrServiceMethodNotFound.Error(), *methodResult.Error)
 	assert.Nil(t, methodResult.Payload)
@@ -86,18 +95,22 @@ func TestServer(t *testing.T) {
 	 * Call existing service and "echo" method
 	 */
 
-	err = clientEncoder.Encode(MethodCallMessage{
-		CallId:      CallId("call-3"),
-		ServiceName: ServiceName("foo"),
-		MethodName:  MethodName("echo"),
-		Payload:     "hello",
+	err = clientEncoder.Encode(MessageEnvelope{
+		Call: &MethodCallMessage{
+			CallId:      CallId("call-3"),
+			ServiceName: ServiceName("foo"),
+			MethodName:  MethodName("echo"),
+			Payload:     "hello",
+		},
 	})
 	assert.NoError(t, err)
 	time.Sleep(10 * time.Millisecond)
 
-	methodResult = MethodResultMessage{}
-	err = clientDecoder.Decode(&methodResult)
+	message = MessageEnvelope{}
+	err = clientDecoder.Decode(&message)
 	assert.NoError(t, err)
+	assert.NotNil(t, message.Result)
+	methodResult = message.Result
 	assert.Equal(t, CallId("call-3"), methodResult.CallId)
 	assert.Nil(t, methodResult.Error)
 	assert.Equal(t, "hello", methodResult.Payload)
@@ -106,18 +119,22 @@ func TestServer(t *testing.T) {
 	 * Call existing service and "multiply" method
 	 */
 
-	err = clientEncoder.Encode(MethodCallMessage{
-		CallId:      CallId("call-4"),
-		ServiceName: ServiceName("foo"),
-		MethodName:  MethodName("multiply"),
-		Payload:     float64(5),
+	err = clientEncoder.Encode(MessageEnvelope{
+		Call: &MethodCallMessage{
+			CallId:      CallId("call-4"),
+			ServiceName: ServiceName("foo"),
+			MethodName:  MethodName("multiply"),
+			Payload:     float64(5),
+		},
 	})
 	assert.NoError(t, err)
 	time.Sleep(10 * time.Millisecond)
 
-	methodResult = MethodResultMessage{}
-	err = clientDecoder.Decode(&methodResult)
+	message = MessageEnvelope{}
+	err = clientDecoder.Decode(&message)
 	assert.NoError(t, err)
+	assert.NotNil(t, message.Result)
+	methodResult = message.Result
 	assert.Equal(t, CallId("call-4"), methodResult.CallId)
 	assert.Nil(t, methodResult.Error)
 	assert.Equal(t, float64(10), methodResult.Payload)
@@ -126,18 +143,22 @@ func TestServer(t *testing.T) {
 	 * Call existing service and "error" method
 	 */
 
-	err = clientEncoder.Encode(MethodCallMessage{
-		CallId:      CallId("call-5"),
-		ServiceName: ServiceName("foo"),
-		MethodName:  MethodName("error"),
-		Payload:     nil,
+	err = clientEncoder.Encode(MessageEnvelope{
+		Call: &MethodCallMessage{
+			CallId:      CallId("call-5"),
+			ServiceName: ServiceName("foo"),
+			MethodName:  MethodName("error"),
+			Payload:     nil,
+		},
 	})
 	assert.NoError(t, err)
 	time.Sleep(10 * time.Millisecond)
 
-	methodResult = MethodResultMessage{}
-	err = clientDecoder.Decode(&methodResult)
+	message = MessageEnvelope{}
+	err = clientDecoder.Decode(&message)
 	assert.NoError(t, err)
+	assert.NotNil(t, message.Result)
+	methodResult = message.Result
 	assert.Equal(t, CallId("call-5"), methodResult.CallId)
 	assert.Equal(t, errors.New("some error").Error(), *methodResult.Error)
 	assert.Nil(t, methodResult.Payload)
